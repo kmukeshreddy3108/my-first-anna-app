@@ -1,0 +1,14 @@
+{
+  "slug": "my-first-anna-app",
+  "name": "my-first-anna-app",
+  "version": "0.1.0",
+  "executa_type": "tool",
+  "description": "Python Executa for the my-first-anna-app Anna App.",
+  "tool_id": "tool-dev-my-first-anna-app",
+  "type": "python",
+  "manifest_file": "manifest.json",
+  "distribution": {
+    "type": "local",
+    "executable_name": "tool-dev-my-first-anna-app"
+  }
+}

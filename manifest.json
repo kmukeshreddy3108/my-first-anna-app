@@ -2,10 +2,18 @@
   "schema": 2,
   "required_executas": [
     {
-      "tool_id": "tool-dev-my-first-anna-app"
+      "tool_id": "bundled:my-first-anna-app"
     }
   ],
-  "tags": ["my-first-anna-app"],
+  "host_capabilities": ["llm.sample", "llm.complete"],
+  "permissions": [
+    "tools.invoke",
+    "storage.read",
+    "storage.write",
+    "llm.complete"
+  ],
+  "system_prompt_addendum": "When the user asks for a summary, use the Text Summary App window and its bundled summarization tool. Preserve the source meaning and avoid inventing details.",
+  "tags": ["summary", "productivity", "text"],
   "ui": {
     "bundle": {
       "format": "static-spa",
@@ -22,9 +30,10 @@
       }
     ],
     "host_api": {
-      "tools": ["tool-dev-my-first-anna-app"],
+      "tools": ["required:*"],
       "storage": ["get", "set"],
-      "window": ["set_title", "ready"]
+      "window": ["set_title", "ready"],
+      "llm": ["complete", "sample"]
     },
     "csp_overrides": {},
     "state_merge": "last_writer_wins"

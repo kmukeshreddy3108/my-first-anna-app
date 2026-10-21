@@ -1,38 +1,64 @@
-// Minimal Anna App bundle entry. Replace with real logic.
 import { AnnaAppRuntime } from "/static/anna-apps/_sdk/latest/index.js";
 
 const TOOL_ID = "tool-dev-my-first-anna-app";
 
 async function main() {
   const status = document.getElementById("status");
-  const btn = document.getElementById("primary-btn");
-  if (!status || !btn) return;
+  const form = document.getElementById("summary-form");
+  const input = document.getElementById("source-text");
+  const button = document.getElementById("generate-btn");
+  const resultPanel = document.getElementById("result-panel");
+  const result = document.getElementById("result");
+  if (!status || !form || !input || !button || !resultPanel || !result) return;
 
   let anna;
   try {
     anna = await AnnaAppRuntime.connect();
   } catch (e) {
-    status.textContent = "Standalone preview (no host).";
+    status.textContent = "Open this bundle inside Anna to generate a summary.";
     return;
   }
 
-  await anna.window.set_title({ title: "my-first-anna-app" });
-  status.textContent = "Ready.";
+  await anna.window.set_title({ title: "Text Summary" });
+  status.textContent = "Ready to summarize.";
 
-  btn.addEventListener("click", async () => {
-    status.textContent = "Running…";
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const text = input.value.trim();
+    if (!text) {
+      status.className = "error";
+      status.textContent = "Enter some text before generating a summary.";
+      resultPanel.classList.add("hidden");
+      return;
+    }
+
+    button.disabled = true;
+    status.className = "";
+    status.textContent = "Generating summary...";
+    resultPanel.classList.add("hidden");
     try {
-      const out = await anna.tools.invoke({
+      const response = await anna.tools.invoke({
         tool_id: TOOL_ID,
-        method: "ping",
-        args: {},
+        method: "summarize",
+        args: { text },
+        timeoutMs: 90000,
       });
-      await anna.storage.set({ key: "my-first-anna-app:last", value: Date.now() });
-      status.textContent = JSON.stringify(out, null, 2);
+      const summary =
+        response?.data?.summary ??
+        response?.result?.data?.summary ??
+        response?.summary;
+      if (!summary) throw new Error("The summarizer returned no summary.");
+      result.textContent = summary;
+      resultPanel.classList.remove("hidden");
+      status.textContent = "Summary generated.";
+      await anna.storage.set({ key: "summary:last", value: { text, summary } });
     } catch (e) {
-      status.textContent = "Error: " + e.message;
+      status.className = "error";
+      status.textContent = "Error: " + (e.message || "Unable to generate summary.");
+    } finally {
+      button.disabled = false;
     }
   });
 }
 
-main();
+await main();

@@ -1,6 +1,12 @@
 {
+  "slug": "my-first-anna-app",
   "name": "my-first-anna-app",
-  "tagline": "TODO",
-  "description": "TODO",
+  "bundled_executas": {
+    "my-first-anna-app": {
+      "path": "executas/my-first-anna-app"
+    }
+  },
+  "tagline": "Turn long text into clear, useful summaries",
+  "description": "A focused Anna App for generating concise summaries from pasted text.",
   "category": "productivity"
 }

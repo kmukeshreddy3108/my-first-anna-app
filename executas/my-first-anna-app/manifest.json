@@ -1,0 +1,6 @@
+﻿{
+  "name": "tool-dev-my-first-anna-app",
+  "capabilities": [
+    "llm.complete"
+  ]
+}

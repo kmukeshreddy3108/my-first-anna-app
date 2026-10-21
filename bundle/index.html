@@ -2,12 +2,40 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>my-first-anna-app</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Text Summary</title>
+    <style>
+      :root { color-scheme: light; font-family: system-ui, sans-serif; color: #17202a; background: #f4f7fb; }
+      * { box-sizing: border-box; }
+      body { margin: 0; padding: 24px; }
+      main { max-width: 760px; margin: 0 auto; }
+      h1 { margin: 0 0 8px; font-size: 28px; }
+      p { margin: 0 0 20px; color: #52606d; }
+      label { display: block; margin-bottom: 8px; font-weight: 650; }
+      textarea { width: 100%; min-height: 220px; padding: 14px; border: 1px solid #cbd5e1; border-radius: 8px; resize: vertical; font: inherit; background: white; }
+      button { margin-top: 14px; padding: 11px 16px; border: 0; border-radius: 7px; color: white; background: #1565c0; font: inherit; font-weight: 650; cursor: pointer; }
+      button:disabled { cursor: wait; opacity: .65; }
+      #status { min-height: 24px; margin-top: 18px; color: #52606d; }
+      #status.error { color: #b42318; }
+      #result { margin-top: 12px; padding: 16px; border-left: 4px solid #1565c0; border-radius: 4px; background: white; white-space: pre-wrap; line-height: 1.55; }
+      .hidden { display: none; }
+    </style>
     <script src="./app.js" type="module"></script>
   </head>
   <body>
-    <h1>my-first-anna-app</h1>
-    <button id="primary-btn">Run</button>
-    <pre id="status">…</pre>
+    <main>
+      <h1>Text Summary</h1>
+      <p>Paste text below and generate a concise summary with Anna's LLM.</p>
+      <form id="summary-form">
+        <label for="source-text">Text to summarize</label>
+        <textarea id="source-text" placeholder="Paste an article, notes, or other text here..."></textarea>
+        <button id="generate-btn" type="submit">Generate Summary</button>
+      </form>
+      <output id="status" aria-live="polite"></output>
+      <section id="result-panel" class="hidden" aria-labelledby="result-heading">
+        <h2 id="result-heading">Summary</h2>
+        <div id="result"></div>
+      </section>
+    </main>
   </body>
 </html>
