@@ -1,126 +1,91 @@
-name: Build Executa binaries
+name: Build Executa Binaries
 
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Release version without the v prefix"
+        description: 'Executa version tag (e.g., 0.2.0)'
         required: true
-        default: "0.2.0"
-        type: string
-
-permissions:
-  contents: write
-
-env:
-  EXECUTA_NAME: my-first-anna-app-summarizer
-  SOURCE_FILE: executas/my-first-anna-app/my_first_anna_app_plugin.py
+        default: '0.2.0'
 
 jobs:
   build:
-    name: Build ${{ matrix.platform }}
-    runs-on: ${{ matrix.runner }}
+    name: Build (${{ matrix.platform }})
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - platform: linux-x86_64
-            runner: ubuntu-latest
+            os: ubuntu-latest
+            archive_format: tar.gz
           - platform: windows-x86_64
-            runner: windows-latest
-          - platform: darwin-x86_64
-            runner: macos-13
+            os: windows-latest
+            archive_format: zip
           - platform: darwin-arm64
-            runner: macos-14
+            os: macos-14
+            archive_format: tar.gz
 
     steps:
-      - name: Check out source
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: '3.11'
 
-      - name: Set up uv
+      - name: Install uv
         uses: astral-sh/setup-uv@v5
-        with:
-          version: "latest"
 
-      - name: Create build environment
-        run: uv venv --python 3.11 .venv
-
-      - name: Install PyInstaller
-        run: uv pip install --python .venv pyinstaller
-
-      - name: Build executable
-        run: >
-          uv run --python .venv pyinstaller
-          --noconfirm
-          --clean
-          --onedir
-          --name ${{ env.EXECUTA_NAME }}
-          --distpath build/dist
-          --workpath build/work
-          --specpath build/spec
-          ${{ env.SOURCE_FILE }}
-
-      - name: Archive Unix executable
-        if: runner.os != 'Windows'
+      - name: Build Executa Binary (PyInstaller)
         shell: bash
+        working-directory: executas/my-first-anna-app
         run: |
-          mkdir -p dist
-          tar -czf "dist/${EXECUTA_NAME}-${{ inputs.version }}-${{ matrix.platform }}.tar.gz" \
-            -C build/dist "${EXECUTA_NAME}"
+          uv pip install --system pyinstaller .
+          pyinstaller --onedir --name my-first-anna-app-summarizer my_first_anna_app_plugin.py
 
-      - name: Archive Windows executable
-        if: runner.os == 'Windows'
+      - name: Package Artifact (Unix)
+        if: matrix.archive_format == 'tar.gz'
+        shell: bash
+        working-directory: executas/my-first-anna-app/dist
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          ARCHIVE_NAME="my-first-anna-app-summarizer-${VERSION}-${{ matrix.platform }}.tar.gz"
+          tar -czf "$ARCHIVE_NAME" my-first-anna-app-summarizer
+          sha256sum "$ARCHIVE_NAME" > "${ARCHIVE_NAME}.sha256"
+
+      - name: Package Artifact (Windows)
+        if: matrix.archive_format == 'zip'
         shell: pwsh
+        working-directory: executas/my-first-anna-app/dist
         run: |
-          New-Item -ItemType Directory -Force -Path dist | Out-Null
-          Compress-Archive `
-            -Path "build/dist/$env:EXECUTA_NAME" `
-            -DestinationPath "dist/$env:EXECUTA_NAME-${{ inputs.version }}-${{ matrix.platform }}.zip" `
-            -Force
+          $Version = "${{ github.event.inputs.version }}"
+          $ArchiveName = "my-first-anna-app-summarizer-$Version-${{ matrix.platform }}.zip"
+          Compress-Archive -Path "my-first-anna-app-summarizer" -DestinationPath "$ArchiveName"
+          (Get-FileHash -Path "$ArchiveName" -Algorithm SHA256).Hash.ToLower() | Out-File "${{ matrix.platform }}.sha256"
 
-      - name: Generate SHA-256 checksum
-        shell: bash
-        run: |
-          artifact="dist/${EXECUTA_NAME}-${{ inputs.version }}-${{ matrix.platform }}"
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            artifact="${artifact}.zip"
-          else
-            artifact="${artifact}.tar.gz"
-          fi
-          if command -v sha256sum >/dev/null 2>&1; then
-            sha256sum "$artifact" > "${artifact}.sha256"
-          else
-            shasum -a 256 "$artifact" > "${artifact}.sha256"
-          fi
-
-      - name: Upload build artifacts
+      - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.platform }}
-          path: dist/*
-          if-no-files-found: error
+          name: executa-${{ matrix.platform }}
+          path: executas/my-first-anna-app/dist/*
 
   release:
-    name: Publish GitHub release
     needs: build
+    name: Publish GitHub Release
     runs-on: ubuntu-latest
     steps:
-      - name: Download build artifacts
+      - name: Download All Artifacts
         uses: actions/download-artifact@v4
         with:
-          path: release-assets
-          merge-multiple: true
+          path: all-artifacts
 
-      - name: Publish GitHub release
+      - name: Create GitHub Release & Upload Assets
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ github.event.inputs.version }}
+          name: Executa Release v${{ github.event.inputs.version }}
+          files: all-artifacts/executa-*/*
         env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release create "v${{ inputs.version }}" release-assets/* \
-            --repo "${{ github.repository }}" \
-            --title "v${{ inputs.version }}" \
-            --generate-notes
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
