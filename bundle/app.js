@@ -1,6 +1,8 @@
 import { AnnaAppRuntime } from "/static/anna-apps/_sdk/latest/index.js";
 
-const TOOL_ID = "tool-dev-my-first-anna-app";
+const EXECUTA_HANDLE = "summarizer";
+const DEV_FALLBACK_TOOL_ID = "tool-dev-my-first-anna-app";
+const TOOL_ID = window.__ANNA_TOOL_IDS__?.[EXECUTA_HANDLE] || DEV_FALLBACK_TOOL_ID;
 
 async function main() {
   const status = document.getElementById("status");

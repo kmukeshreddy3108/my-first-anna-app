@@ -2,8 +2,8 @@
   "slug": "my-first-anna-app",
   "name": "my-first-anna-app",
   "bundled_executas": {
-    "my-first-anna-app": {
-      "path": "executas/my-first-anna-app"
+    "summarizer": {
+      "path": "./executas/my-first-anna-app"
     }
   },
   "tagline": "Turn long text into clear, useful summaries",

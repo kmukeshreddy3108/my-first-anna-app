@@ -2,7 +2,7 @@
   "schema": 2,
   "required_executas": [
     {
-      "tool_id": "bundled:my-first-anna-app"
+      "tool_id": "bundled:summarizer"
     }
   ],
   "host_capabilities": ["llm.sample", "llm.complete"],
@@ -30,7 +30,7 @@
       }
     ],
     "host_api": {
-      "tools": ["required:*"],
+      "tools": ["required:bundled:summarizer"],
       "storage": ["get", "set"],
       "window": ["set_title", "ready"],
       "llm": ["complete", "sample"]
