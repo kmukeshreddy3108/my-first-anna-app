@@ -1,6 +1,23 @@
-﻿{
-  "name": "tool-dev-my-first-anna-app",
-  "capabilities": [
+{
+  "display_name": "tool-dev-my-first-anna-app",
+  "version": "0.1.0",
+  "description": "Summarize a piece of text via host sampling.",
+  "host_capabilities": [
+    "llm.sample",
     "llm.complete"
+  ],
+  "tools": [
+    {
+      "name": "summarize",
+      "description": "Summarize a piece of text via host sampling.",
+      "parameters": [
+        {
+          "name": "text",
+          "type": "string",
+          "description": "Text to summarize.",
+          "required": true
+        }
+      ]
+    }
   ]
 }

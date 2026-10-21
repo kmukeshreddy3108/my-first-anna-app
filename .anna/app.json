@@ -1,0 +1,8 @@
+{
+  "$schema": "anna-app-identity/v1",
+  "host": "https://anna.partners",
+  "app_id": 601,
+  "slug": "my-first-anna-app",
+  "handle": "kathi",
+  "first_published_at": "2026-10-21T13:53:59.583Z"
+}
