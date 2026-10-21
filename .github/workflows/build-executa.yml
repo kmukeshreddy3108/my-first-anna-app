@@ -43,7 +43,7 @@ jobs:
         working-directory: executas/my-first-anna-app
         run: |
           uv pip install --system pyinstaller .
-          pyinstaller --onedir --name my-first-anna-app-summarizer my_first_anna_app_plugin.py
+          uv run pyinstaller --onedir --name my-first-anna-app-summarizer my_first_anna_app_plugin.py
 
       - name: Package Artifact (Unix)
         if: matrix.archive_format == 'tar.gz'
