@@ -25,9 +25,6 @@ jobs:
           - platform: darwin-arm64
             os: macos-14
             archive_format: tar.gz
-          - platform: darwin-x86_64
-            os: macos-13
-            archive_format: tar.gz
 
     steps:
       - name: Checkout Repository
