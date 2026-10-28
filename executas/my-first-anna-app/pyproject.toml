@@ -4,9 +4,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tool-dev-my-first-anna-app"
-version = "0.1.0"
-description = "Executa for the my-first-anna-app Anna App"
+version = "0.3.0"
+description = "AI Study & Document Analyst Executa for the my-first-anna-app Anna App"
 requires-python = ">=3.10"
+
+[project.optional-dependencies]
+test = ["pytest>=8"]
 
 [project.scripts]
 "tool-dev-my-first-anna-app" = "my_first_anna_app_plugin:main"

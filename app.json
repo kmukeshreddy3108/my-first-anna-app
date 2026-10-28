@@ -6,7 +6,7 @@
       "path": "./executas/my-first-anna-app"
     }
   },
-  "tagline": "Turn long text into clear, useful summaries",
-  "description": "A focused Anna App for generating concise summaries from pasted text.",
+  "tagline": "Understand documents, verify drafts, and study smarter",
+  "description": "StudyLens AI is an AI Study & Document Analyst for students, researchers, professionals, and anyone who needs to turn dense text into reliable next steps. Paste lecture notes, an article, meeting transcript, or report and StudyLens first classifies the document, then extracts key points, entities, definitions, and open questions as structured evidence. From that analysis, generate short or detailed summaries, action items, flashcards, or an explained multiple-choice quiz. A separate critique-and-refine pass checks drafts against the source, highlights missing points and unsupported claims, and produces a clearer revision. Grounded follow-up Q&A uses the document and analysis context and explicitly says when an answer is not present instead of guessing. Long documents are processed in bounded chunks and combined. AI-generated content is labelled, malformed model responses are retried safely, and a clear rule-based error is shown when sampling is unavailable. Save analyses to history for later review, copy results, or export a Markdown study note. To use it, paste text, run Analyze, review verification, choose output tabs, ask a question, and save the result.",
   "category": "productivity"
 }

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title">
+  <title>StudyLens AI</title>
+  <rect width="128" height="128" rx="28" fill="#2563eb"/>
+  <path d="M30 35c0-6 5-11 11-11h46c6 0 11 5 11 11v38c0 6-5 11-11 11H61l-18 15V84h-2c-6 0-11-5-11-11V35Z" fill="#fff" opacity=".96"/>
+  <path d="m45 63 10-12 9 8 15-19" fill="none" stroke="#2563eb" stroke-linecap="round" stroke-linejoin="round" stroke-width="7"/>
+  <circle cx="45" cy="63" r="4" fill="#10b981"/><circle cx="79" cy="40" r="4" fill="#10b981"/>
+</svg>

@@ -1,23 +1,16 @@
 {
   "display_name": "tool-dev-my-first-anna-app",
-  "version": "0.1.0",
-  "description": "Summarize a piece of text via host sampling.",
-  "host_capabilities": [
-    "llm.sample",
-    "llm.complete"
-  ],
+  "version": "0.3.0",
+  "description": "AI Study & Document Analyst with structured analysis, verified outputs, grounded Q&A, and history.",
+  "host_capabilities": ["llm.sample", "llm.complete"],
   "tools": [
-    {
-      "name": "summarize",
-      "description": "Summarize a piece of text via host sampling.",
-      "parameters": [
-        {
-          "name": "text",
-          "type": "string",
-          "description": "Text to summarize.",
-          "required": true
-        }
-      ]
-    }
+    {"name": "analyze_document", "description": "Classify and structurally analyze a document.", "parameters": {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]}},
+    {"name": "generate_outputs", "description": "Generate a summary, action list, flashcards, or quiz from analysis.", "parameters": {"type": "object", "properties": {"analysis": {"type": "object"}, "mode": {"type": "string"}}, "required": ["analysis", "mode"]}},
+    {"name": "critique_and_refine", "description": "Check a draft against source text and revise unsupported or missing content.", "parameters": {"type": "object", "properties": {"source_text": {"type": "string"}, "draft": {}}, "required": ["source_text", "draft"]}},
+    {"name": "ask_followup", "description": "Answer a question using only the supplied document analysis.", "parameters": {"type": "object", "properties": {"source_text": {"type": "string"}, "analysis": {"type": "object"}, "question": {"type": "string"}, "history": {"type": "array"}}, "required": ["source_text", "analysis", "question"]}},
+    {"name": "save_analysis", "description": "Save an analysis for later review.", "parameters": {"type": "object", "properties": {"analysis": {"type": "object"}, "title": {"type": "string"}}, "required": ["analysis"]}},
+    {"name": "list_analyses", "description": "List saved analyses.", "parameters": {"type": "object", "properties": {}, "additionalProperties": false}},
+    {"name": "get_analysis", "description": "Get a saved analysis by ID.", "parameters": {"type": "object", "properties": {"id": {"type": "string"}}, "required": ["id"]}},
+    {"name": "delete_analysis", "description": "Delete a saved analysis by ID.", "parameters": {"type": "object", "properties": {"id": {"type": "string"}}, "required": ["id"]}}
   ]
 }

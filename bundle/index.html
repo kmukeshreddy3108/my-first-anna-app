@@ -1,42 +1,50 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Text Summary</title>
-    <style>
-      :root { color-scheme: light; font-family: system-ui, sans-serif; color: #17202a; background: #f4f7fb; }
-      * { box-sizing: border-box; }
-      body { margin: 0; padding: 24px; }
-      main { max-width: 760px; margin: 0 auto; }
-      h1 { margin: 0 0 8px; font-size: 28px; }
-      p { margin: 0 0 20px; color: #52606d; }
-      label { display: block; margin-bottom: 8px; font-weight: 650; }
-      textarea { width: 100%; min-height: 220px; padding: 14px; border: 1px solid #cbd5e1; border-radius: 8px; resize: vertical; font: inherit; background: white; }
-      button { margin-top: 14px; padding: 11px 16px; border: 0; border-radius: 7px; color: white; background: #1565c0; font: inherit; font-weight: 650; cursor: pointer; }
-      button:disabled { cursor: wait; opacity: .65; }
-      #status { min-height: 24px; margin-top: 18px; color: #52606d; }
-      #status.error { color: #b42318; }
-      #result { margin-top: 12px; padding: 16px; border-left: 4px solid #1565c0; border-radius: 4px; background: white; white-space: pre-wrap; line-height: 1.55; }
-      .hidden { display: none; }
-    </style>
-    <script src="./anna-tool-ids.js" defer></script>
-    <script src="./app.js" type="module"></script>
-  </head>
-  <body>
-    <main>
-      <h1>Text Summary</h1>
-      <p>Paste text below and generate a concise summary with Anna's LLM.</p>
-      <form id="summary-form">
-        <label for="source-text">Text to summarize</label>
-        <textarea id="source-text" placeholder="Paste an article, notes, or other text here..."></textarea>
-        <button id="generate-btn" type="submit">Generate Summary</button>
-      </form>
-      <output id="status" aria-live="polite"></output>
-      <section id="result-panel" class="hidden" aria-labelledby="result-heading">
-        <h2 id="result-heading">Summary</h2>
-        <div id="result"></div>
-      </section>
-    </main>
-  </body>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>StudyLens AI</title>
+  <style>
+    :root{font-family:Inter,system-ui,sans-serif;color:#172033;background:#f4f7fb;line-height:1.45}
+    *{box-sizing:border-box}body{margin:0;padding:24px}main{max-width:980px;margin:auto}
+    header{display:flex;align-items:center;gap:14px;margin-bottom:22px}.logo{width:48px;height:48px}
+    h1{margin:0;font-size:28px}h2{font-size:20px;margin:0 0 12px}p{color:#52606d}
+    .card{background:#fff;border:1px solid #dbe3ee;border-radius:14px;padding:20px;box-shadow:0 4px 18px #1720330b;margin-bottom:16px}
+    textarea{width:100%;min-height:230px;padding:14px;border:1px solid #b9c5d6;border-radius:9px;font:inherit;resize:vertical}
+    button,select{font:inherit;border:0;border-radius:8px;padding:10px 14px;cursor:pointer}
+    button{background:#2563eb;color:#fff;font-weight:650}button.secondary{background:#e8eef8;color:#19345f}button:disabled{opacity:.55;cursor:wait}
+    .actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}.muted{color:#66758a;font-size:13px}
+    .error{color:#b42318;background:#fff0ee;border:1px solid #f1b8b0;padding:10px;border-radius:8px}
+    .progress{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:14px 0}.step{padding:9px;border-radius:8px;background:#edf2f8;color:#6b7890;font-size:13px;text-align:center}.step.active{background:#dbeafe;color:#1d4ed8}.step.done{background:#dcfce7;color:#166534}
+    .tabs{display:flex;gap:6px;flex-wrap:wrap;border-bottom:1px solid #dbe3ee;margin-bottom:14px}.tab{background:transparent;color:#52606d;border-radius:8px 8px 0 0}.tab.active{background:#2563eb;color:white}
+    pre,.output{white-space:pre-wrap;background:#f7f9fc;padding:14px;border-radius:8px;min-height:100px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.history-item{padding:10px;border-bottom:1px solid #e6ebf2;display:flex;justify-content:space-between;gap:12px}
+    @media(max-width:650px){body{padding:14px}.grid{grid-template-columns:1fr}.progress{grid-template-columns:1fr 1fr}h1{font-size:23px}}
+  </style>
+  <script src="./anna-tool-ids.js" defer></script>
+  <script src="./app.js" type="module"></script>
+</head>
+<body>
+<main>
+  <header><img class="logo" src="./logo.svg" alt="StudyLens AI logo"><div><h1>StudyLens AI</h1><p class="muted">AI Study &amp; Document Analyst</p></div></header>
+  <section class="card">
+    <h2>Turn a document into a study plan</h2>
+    <p>Paste notes, an article, meeting transcript, or report. AI analysis is checked and labelled; if sampling is unavailable, the app tells you clearly.</p>
+    <label for="source-text"><strong>Document text</strong></label>
+    <textarea id="source-text" placeholder="Paste your document here..."></textarea>
+    <div class="actions"><button id="sample-btn" class="secondary" type="button">Use sample document</button><button id="analyze-btn" type="button">Analyze document</button></div>
+    <p id="status" class="muted" aria-live="polite">Ready.</p>
+  </section>
+  <section id="progress-card" class="card" hidden>
+    <h2>Analysis pipeline</h2><div class="progress"><div id="step-analyze" class="step">1. Analyze</div><div id="step-output" class="step">2. Generate</div><div id="step-critique" class="step">3. Verify</div><div id="step-save" class="step">4. Save</div></div>
+  </section>
+  <section id="results-card" class="card" hidden>
+    <div class="tabs" role="tablist"><button class="tab active" data-tab="summary">Summary</button><button class="tab" data-tab="actions">Action items</button><button class="tab" data-tab="study">Flashcards / Quiz</button><button class="tab" data-tab="ask">Ask questions</button></div>
+    <div id="tab-summary" class="tab-content"><div class="actions"><button data-mode="short" class="secondary">Short summary</button><button data-mode="detailed" class="secondary">Detailed summary</button><button id="copy-btn" class="secondary">Copy</button><button id="export-btn" class="secondary">Export Markdown</button></div><div id="analysis-output" class="output"></div><h3>Verification</h3><div id="critique-output" class="output"></div></div>
+    <div id="tab-actions" class="tab-content" hidden><button data-mode="actions">Generate action items</button><div id="actions-output" class="output"></div></div>
+    <div id="tab-study" class="tab-content" hidden><div class="actions"><button data-mode="flashcards">Flashcards</button><button data-mode="quiz">Quiz</button></div><div id="study-output" class="output"></div></div>
+    <div id="tab-ask" class="tab-content" hidden><label for="question"><strong>Question grounded in this document</strong></label><textarea id="question" style="min-height:80px" placeholder="What is the main conclusion?"></textarea><button id="ask-btn">Ask</button><div id="answer-output" class="output"></div></div>
+  </section>
+  <section class="card"><h2>History</h2><div id="history-list" class="muted">No saved analyses yet.</div></section>
+</main>
+</body>
 </html>

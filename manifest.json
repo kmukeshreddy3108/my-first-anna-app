@@ -12,8 +12,8 @@
     "storage.write",
     "llm.complete"
   ],
-  "system_prompt_addendum": "When the user asks for a summary, use the Text Summary App window and its bundled summarization tool. Preserve the source meaning and avoid inventing details.",
-  "tags": ["summary", "productivity", "text"],
+  "system_prompt_addendum": "Use StudyLens AI to analyze pasted documents, generate grounded study outputs, critique drafts against sources, and answer follow-up questions without inventing facts. Clearly label AI-generated results and report when sampling is unavailable.",
+  "tags": ["ai", "study", "documents", "summary", "productivity"],
   "ui": {
     "bundle": {
       "format": "static-spa",
@@ -23,10 +23,10 @@
     "views": [
       {
         "name": "main",
-        "title": "my-first-anna-app",
+        "title": "StudyLens AI",
         "default": true,
-        "default_size": { "w": 480, "h": 360 },
-        "min_size": { "w": 320, "h": 240 }
+        "default_size": { "w": 900, "h": 760 },
+        "min_size": { "w": 360, "h": 520 }
       }
     ],
     "host_api": {
