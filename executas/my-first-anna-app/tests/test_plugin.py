@@ -51,6 +51,8 @@ def test_all_output_modes_are_supported(monkeypatch):
         result = plugin._generate({"analysis": analysis, "mode": mode})
         assert result["success"] is True
         assert result["data"]["output"]["mode"] == mode
+    short = plugin._generate({"analysis": analysis, "mode": "short"})
+    assert short["data"]["output"]["summary"] == "One verified point."
 
 
 def test_long_text_is_chunked():

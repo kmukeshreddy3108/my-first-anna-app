@@ -21,6 +21,15 @@ async function invoke(method, args) {
 }
 
 function pretty(value) { return JSON.stringify(value, null, 2); }
+function renderOutput(value) {
+  if (!value || typeof value !== "object") return String(value ?? "");
+  const parts = [];
+  if (value.summary) parts.push(value.summary);
+  if (Array.isArray(value.items) && value.items.length) {
+    parts.push(value.items.map(item => `• ${typeof item === "string" ? item : pretty(item)}`).join("\n"));
+  }
+  return parts.join("\n\n") || pretty(value);
+}
 function activeText() { return $("source-text").value.trim(); }
 function showTab(name) {
   document.querySelectorAll(".tab").forEach(button => button.classList.toggle("active", button.dataset.tab === name));
@@ -55,7 +64,7 @@ async function analyze() {
     current.analysis = analyzed.analysis; $("analysis-output").textContent = pretty(current.analysis);
     setStep("step-analyze", "done"); setStep("step-output", "active");
     const summary = await invoke("generate_outputs", { analysis: current.analysis, mode: "short" });
-    current.outputs.short = summary.output; $("analysis-output").textContent = pretty(summary.output);
+    current.outputs.short = summary.output; $("analysis-output").textContent = renderOutput(summary.output);
     setStep("step-output", "done"); setStep("step-critique", "active"); setStatus("Checking the draft against the source...");
     const critique = await invoke("critique_and_refine", { source_text: text, draft: summary.output });
     current.critique = critique.critique; $("critique-output").textContent = pretty(current.critique);
@@ -81,7 +90,7 @@ async function generate(mode) {
   if (!current.analysis) return;
   const target = mode === "actions" ? $("actions-output") : mode === "flashcards" || mode === "quiz" ? $("study-output") : $("analysis-output");
   target.textContent = "Generating...";
-  try { const result = await invoke("generate_outputs", { analysis: current.analysis, mode }); current.outputs[mode] = result.output; target.textContent = pretty(result.output); }
+  try { const result = await invoke("generate_outputs", { analysis: current.analysis, mode }); current.outputs[mode] = result.output; target.textContent = renderOutput(result.output); }
   catch (error) { target.textContent = error.message; }
 }
 async function ask() {

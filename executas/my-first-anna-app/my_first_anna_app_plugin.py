@@ -212,7 +212,21 @@ def _generate(args: dict[str, Any]) -> dict[str, Any]:
     mode = args.get("mode")
     if not isinstance(analysis, dict) or mode not in {"short", "detailed", "actions", "flashcards", "quiz"}:
         return {"success": False, "error": "analysis and a supported mode are required."}
-    fallback = {"mode": mode, "items": analysis.get("keyPoints", [])}
+    key_points = [str(item).strip() for item in analysis.get("keyPoints", []) if str(item).strip()]
+    if mode == "short":
+        fallback = {
+            "mode": mode,
+            "summary": " ".join(key_points[:3]),
+            "items": key_points[:3],
+        }
+    elif mode == "detailed":
+        fallback = {
+            "mode": mode,
+            "summary": " ".join(key_points),
+            "items": key_points,
+        }
+    else:
+        fallback = {"mode": mode, "items": key_points}
     prompt = f"Generate {mode} study output from this verified analysis. Return JSON with mode and items. Keep facts grounded in the analysis.\n\n{json.dumps(analysis)}"
     output, source, error = _sample_json(prompt, fallback)
     return {"success": True, "data": {"output": output, "source": source, "warning": error}}
