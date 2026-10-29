@@ -3,14 +3,17 @@ import { AnnaAppRuntime } from "/static/anna-apps/_sdk/latest/index.js";
 const TOOL_ID = window.__ANNA_TOOL_IDS__?.summarizer || "tool-dev-my-first-anna-app";
 const sampleText = "Renewable energy is becoming more affordable as solar and wind technology improves. Governments are investing in clean power to reduce emissions, but reliable storage remains a challenge. The report recommends expanding grid infrastructure and supporting research into batteries.";
 let anna = null;
+let appReady = false;
+let recoveringSession = sessionStorage.getItem("studylens.sessionRecovery") === "1";
 let current = { text: "", analysis: null, outputs: {}, critique: null };
 const $ = id => document.getElementById(id);
 const setStatus = (text, error = false) => { $("status").textContent = text; $("status").className = error ? "error" : "muted"; };
 const setStep = (id, state) => { const el = $(id); el.className = `step ${state}`; };
 const unwrap = response => response?.data || response?.result?.data || response || {};
+const isSessionError = error => /unknown session[_ ]id|session expired|invalid session/i.test(error?.message || "");
 
 async function invoke(method, args) {
-  if (!anna) throw new Error("Open this app inside Anna to use AI analysis.");
+  if (!anna || !appReady) throw new Error("Connecting to Anna. Please try again in a moment.");
   const response = await anna.tools.invoke({ tool_id: TOOL_ID, method, args, timeoutMs: 120000 });
   const data = unwrap(response);
   if (data.success === false) throw new Error(data.error || "The tool returned an error.");
@@ -43,6 +46,7 @@ async function loadHistory() {
 async function analyze() {
   const text = activeText();
   if (!text) return setStatus("Paste a document first.", true);
+  if (!appReady) return setStatus("Connecting to Anna. Please try again in a moment.", true);
   $("analyze-btn").disabled = true; $("progress-card").hidden = false; $("results-card").hidden = true;
   current = { text, analysis: null, outputs: {}, critique: null };
   try {
@@ -58,7 +62,19 @@ async function analyze() {
     setStep("step-critique", "done"); $("results-card").hidden = false; setStatus(`${summary.source || analyzed.source || "AI-generated"} result ready. Check the verification panel before relying on it.`);
     await invoke("save_analysis", { title: text.slice(0, 60), analysis: current });
     setStep("step-save", "done"); await loadHistory();
-  } catch (error) { setStatus(error.message || "Analysis failed.", true); }
+    sessionStorage.removeItem("studylens.sessionRecovery");
+  } catch (error) {
+    if (isSessionError(error) && !recoveringSession) {
+      recoveringSession = true;
+      sessionStorage.setItem("studylens.pendingText", text);
+      sessionStorage.setItem("studylens.sessionRecovery", "1");
+      setStatus("Session expired, reconnecting…", true);
+      window.top.location.reload();
+      return;
+    }
+    sessionStorage.removeItem("studylens.sessionRecovery");
+    setStatus(error.message || "Analysis failed.", true);
+  }
   finally { $("analyze-btn").disabled = false; }
 }
 async function generate(mode) {
@@ -76,12 +92,27 @@ async function ask() {
   catch (error) { $("answer-output").textContent = error.message; }
 }
 async function main() {
-  try { anna = await AnnaAppRuntime.connect(); await anna.window.set_title({ title: "StudyLens AI" }); await anna.window.ready(); setStatus("Ready. AI-generated content is labelled and verified."); }
+  try {
+    anna = await AnnaAppRuntime.connect();
+    await anna.window.set_title({ title: "StudyLens AI" });
+    await anna.window.ready();
+    appReady = true;
+    $("analyze-btn").disabled = false;
+    setStatus("Ready. AI-generated content is labelled and verified.");
+  }
   catch { setStatus("Preview mode: open this bundle inside Anna for AI sampling."); }
   $("sample-btn").onclick = () => { $("source-text").value = sampleText; setStatus("Sample loaded. You can edit it before analyzing."); };
   $("analyze-btn").onclick = analyze; $("ask-btn").onclick = ask; $("copy-btn").onclick = () => navigator.clipboard.writeText(markdown());
   $("export-btn").onclick = downloadMarkdown; document.querySelectorAll(".tab").forEach(button => button.onclick = () => showTab(button.dataset.tab));
   document.querySelectorAll("[data-mode]").forEach(button => button.onclick = () => generate(button.dataset.mode));
   await loadHistory();
+  const pendingText = sessionStorage.getItem("studylens.pendingText");
+  if (pendingText && appReady) {
+    sessionStorage.removeItem("studylens.pendingText");
+    sessionStorage.setItem("studylens.sessionRecovery", "1");
+    $("source-text").value = pendingText;
+    setStatus("Reconnected. Retrying your analysis…");
+    analyze();
+  }
 }
 main();
