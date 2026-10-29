@@ -13,6 +13,8 @@ Prerequisites: Node.js, `uv`, Python 3.10+, and the Anna CLI.
 
 ```powershell
 cd C:\Users\kathi\my-first-anna-app
+$env:PYTHONUTF8 = "1"
+$env:PYTHONIOENCODING = "utf-8"
 anna-app validate
 anna-app validate --strict
 anna-app dev --no-watch --executa "dir=executas/my-first-anna-app,tool_id=tool-dev-my-first-anna-app,type=python,command=\"python my_first_anna_app_plugin.py\""

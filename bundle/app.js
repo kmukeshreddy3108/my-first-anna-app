@@ -11,6 +11,7 @@ const setStatus = (text, error = false) => { $("status").textContent = text; $("
 const setStep = (id, state) => { const el = $(id); el.className = `step ${state}`; };
 const unwrap = response => response?.data || response?.result?.data || response || {};
 const isSessionError = error => /unknown session[_ ]id|session expired|invalid session/i.test(error?.message || "");
+const friendlyError = error => (error?.message || "The analysis could not be completed.").replace(/^\[-?\d+\]\s*/, "").replace(/^transport:\s*/i, "");
 
 async function invoke(method, args) {
   if (!anna || !appReady) throw new Error("Connecting to Anna. Please try again in a moment.");
@@ -29,6 +30,18 @@ function renderOutput(value) {
     parts.push(value.items.map(item => `• ${typeof item === "string" ? item : pretty(item)}`).join("\n"));
   }
   return parts.join("\n\n") || pretty(value);
+}
+function renderVerification(value) {
+  if (!value || typeof value !== "object") return "Verification unavailable.";
+  const missing = Array.isArray(value.missingPoints) ? value.missingPoints : [];
+  const unsupported = Array.isArray(value.unsupportedClaims) ? value.unsupportedClaims : [];
+  const changes = Array.isArray(value.changes) ? value.changes : [];
+  const issues = missing.length + unsupported.length;
+  const lines = [`${issues ? "Needs review" : "Verified"}${issues ? ` — ${issues} issue${issues === 1 ? "" : "s"} found` : " — no unsupported claims found"}.`];
+  if (changes.length) lines.push(`What changed:\n${changes.map(change => `• ${typeof change === "string" ? change : pretty(change)}`).join("\n")}`);
+  if (missing.length) lines.push(`Missing points:\n${missing.map(item => `• ${item}`).join("\n")}`);
+  if (unsupported.length) lines.push(`Unsupported claims:\n${unsupported.map(item => `• ${item}`).join("\n")}`);
+  return lines.join("\n\n");
 }
 function activeText() { return $("source-text").value.trim(); }
 function showTab(name) {
@@ -50,7 +63,7 @@ async function loadHistory() {
     const data = await invoke("list_analyses", {});
     const list = data.analyses || [];
     $("history-list").innerHTML = list.length ? list.map(item => `<div class="history-item"><span>${item.title}</span><small>${item.createdAt}</small></div>`).join("") : "No saved analyses yet.";
-  } catch (error) { $("history-list").textContent = error.message; }
+  } catch (error) { $("history-list").textContent = friendlyError(error); }
 }
 async function analyze() {
   const text = activeText();
@@ -58,19 +71,20 @@ async function analyze() {
   if (!appReady) return setStatus("Connecting to Anna. Please try again in a moment.", true);
   $("analyze-btn").disabled = true; $("progress-card").hidden = false; $("results-card").hidden = true;
   current = { text, analysis: null, outputs: {}, critique: null };
+  let activeStep = "step-analyze";
   try {
     setStep("step-analyze", "active"); setStatus("Analyzing document structure, entities, definitions, and open questions...");
     const analyzed = await invoke("analyze_document", { text });
     current.analysis = analyzed.analysis; $("analysis-output").textContent = pretty(current.analysis);
-    setStep("step-analyze", "done"); setStep("step-output", "active");
+    setStep("step-analyze", "done"); activeStep = "step-output"; setStep(activeStep, "active");
     const summary = await invoke("generate_outputs", { analysis: current.analysis, mode: "short" });
     current.outputs.short = summary.output; $("analysis-output").textContent = renderOutput(summary.output);
-    setStep("step-output", "done"); setStep("step-critique", "active"); setStatus("Checking the draft against the source...");
+    setStep("step-output", "done"); activeStep = "step-critique"; setStep(activeStep, "active"); setStatus("Checking the draft against the source...");
     const critique = await invoke("critique_and_refine", { source_text: text, draft: summary.output });
-    current.critique = critique.critique; $("critique-output").textContent = pretty(current.critique);
+    current.critique = critique.critique; $("critique-output").textContent = renderVerification(current.critique);
     setStep("step-critique", "done"); $("results-card").hidden = false; setStatus(`${summary.source || analyzed.source || "AI-generated"} result ready. Check the verification panel before relying on it.`);
-    await invoke("save_analysis", { title: text.slice(0, 60), analysis: current });
-    setStep("step-save", "done"); await loadHistory();
+    activeStep = "step-save"; setStep(activeStep, "active"); await invoke("save_analysis", { title: text.slice(0, 60), analysis: current });
+    setStep(activeStep, "done"); await loadHistory();
     sessionStorage.removeItem("studylens.sessionRecovery");
   } catch (error) {
     if (isSessionError(error) && !recoveringSession) {
@@ -82,7 +96,8 @@ async function analyze() {
       return;
     }
     sessionStorage.removeItem("studylens.sessionRecovery");
-    setStatus(error.message || "Analysis failed.", true);
+    setStep(activeStep, "failed");
+    setStatus(friendlyError(error), true);
   }
   finally { $("analyze-btn").disabled = false; }
 }
@@ -91,14 +106,14 @@ async function generate(mode) {
   const target = mode === "actions" ? $("actions-output") : mode === "flashcards" || mode === "quiz" ? $("study-output") : $("analysis-output");
   target.textContent = "Generating...";
   try { const result = await invoke("generate_outputs", { analysis: current.analysis, mode }); current.outputs[mode] = result.output; target.textContent = renderOutput(result.output); }
-  catch (error) { target.textContent = error.message; }
+  catch (error) { target.textContent = friendlyError(error); }
 }
 async function ask() {
   const question = $("question").value.trim();
   if (!question) return $("answer-output").textContent = "Enter a question first.";
   $("answer-output").textContent = "Checking the document...";
   try { const result = await invoke("ask_followup", { source_text: current.text, analysis: current.analysis, question, history: [] }); $("answer-output").textContent = pretty(result.answer); }
-  catch (error) { $("answer-output").textContent = error.message; }
+  catch (error) { $("answer-output").textContent = friendlyError(error); }
 }
 async function main() {
   try {

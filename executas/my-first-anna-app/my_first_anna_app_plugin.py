@@ -15,6 +15,7 @@ import sys
 import threading
 import time
 import traceback
+import unicodedata
 import uuid
 from pathlib import Path
 from typing import Any
@@ -46,9 +47,13 @@ _requests: queue.Queue[dict[str, Any]] = queue.Queue()
 _sampling_enabled = True
 _store_lock = threading.Lock()
 
+for _stream in (sys.stdin, sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+
 
 def _write(value: dict[str, Any]) -> None:
-    sys.stdout.write(json.dumps(value, ensure_ascii=False) + "\n")
+    sys.stdout.write(json.dumps(value, ensure_ascii=True) + "\n")
     sys.stdout.flush()
 
 
@@ -135,7 +140,9 @@ def _sample_json(prompt: str, fallback: dict[str, Any], max_tokens: int = 1200) 
 def _validate_text(value: Any) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ValueError("Text is required.")
-    text = value.strip()
+    text = unicodedata.normalize("NFKC", value).replace("\x00", "")
+    text = "".join(char for char in text if char in "\r\n\t" or not unicodedata.category(char).startswith("C"))
+    text = text.strip()
     if len(text) < 20:
         raise ValueError("Please provide at least 20 characters of text.")
     if len(text) > MAX_TEXT_CHARS:

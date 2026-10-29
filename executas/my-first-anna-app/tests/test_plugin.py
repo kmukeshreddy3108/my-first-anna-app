@@ -61,6 +61,20 @@ def test_long_text_is_chunked():
     assert all(len(chunk) <= plugin.CHUNK_CHARS for chunk in chunks)
 
 
+def test_unicode_text_is_normalized_and_protocol_safe(monkeypatch):
+    monkeypatch.setattr(plugin, "_sampling_enabled", False)
+    text = 'CO₂ and H₂O: x², “smart quotes”, em—dash, é ñ ü, తెలుగు हिंदी 😀 ≈ ≤ ∑ π.'
+    result = plugin._analyze({"text": text})
+    assert result["success"] is True
+    assert "CO2" in result["data"]["analysis"]["keyPoints"][0]
+    assert "\x00" not in plugin._validate_text(text + "\x00")
+
+
+def test_protocol_frames_are_ascii(monkeypatch, capsys):
+    plugin._write({"result": {"text": "é 😀"}})
+    assert capsys.readouterr().out == '{"result": {"text": "\\u00e9 \\ud83d\\ude00"}}\n'
+
+
 def test_local_persistence(monkeypatch, tmp_path):
     monkeypatch.setattr(plugin, "STORE_PATH", tmp_path / "analyses.json")
     saved = plugin._persist("save_analysis", {"title": "Test", "analysis": {"keyPoints": ["One"]}})
