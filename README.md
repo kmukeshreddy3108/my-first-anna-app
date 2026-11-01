@@ -7,6 +7,22 @@ output, critique the draft against the source, and answer grounded follow-up
 questions. AI results are labelled; when sampling is unavailable, the app
 returns a clear structured error instead of pretending.
 
+## About
+
+StudyLens AI uses a multi-step AI workflow rather than a single chat reply.
+It analyzes a source document into evidence, generates a structured study kit,
+checks the draft in a separate verification pass, and supports grounded
+follow-up questions. Students and professionals can use it for lecture notes,
+articles, reports, and meeting transcripts. Each summary point, flashcard,
+quiz question, and answer can show its source passage. Quiz coverage and
+grading help identify sections that need review. If a question is not answered
+by the document, the app says so instead of guessing. AI-generated content is
+labelled, and Basic mode provides a deterministic fallback when sampling is
+unavailable. Paste or upload a document, review the extracted text, click
+Analyze, then explore Summary, Concepts, Actions, Study, Quiz, Ask, and
+Verification. Saved kits appear in History and can be searched, renamed,
+reopened, deleted, or exported as Markdown or plain text.
+
 ## Run locally
 
 Prerequisites: Node.js, `uv`, Python 3.10+, and the Anna CLI.
@@ -35,6 +51,12 @@ uv sync --extra test
 
 The tests cover health/describe, all workflow tools, malformed model output,
 sampling failure, input validation, chunking, and local persistence.
+
+The browser bundle uses the documented Anna runtime storage methods
+`anna.storage.get` and `anna.storage.set` for resumable client state. The
+Executa also keeps a UTF-8 JSON fallback for local development and standalone
+plugin runs. The installed Anna CLI documents APS storage declarations and
+states that the local dev harness mocks APS by default.
 
 ## Fresh-install review checklist
 
