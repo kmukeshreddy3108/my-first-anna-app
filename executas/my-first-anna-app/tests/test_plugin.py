@@ -68,6 +68,8 @@ def test_summary_modes_have_distinct_grounded_shapes(monkeypatch):
     assert outputs["bullets"]["groups"]
     assert outputs["simple"]["items"][0]["analogy"]
     assert "facts" in outputs["exam_notes"] and "questions" in outputs["exam_notes"]
+    assert outputs["short"]["quality"]["coverage"]["total"] == 2
+    assert outputs["short"]["quality"]["faithfulness"]["verified"] is True
     assert len({json.dumps(value, sort_keys=True) for value in outputs.values()}) == 5
 
 

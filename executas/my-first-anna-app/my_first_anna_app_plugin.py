@@ -405,6 +405,21 @@ def _ground_output(output: dict[str, Any], analysis: dict[str, Any]) -> dict[str
     return output
 
 
+def _summary_quality(output: dict[str, Any], analysis: dict[str, Any]) -> dict[str, Any]:
+    concepts = [_point_text(item) for item in analysis.get("keyPoints", []) if _point_text(item)]
+    searchable = json.dumps(output, ensure_ascii=False).lower()
+    covered = [concept for concept in concepts if concept.lower()[:48] in searchable]
+    missing = [concept for concept in concepts if concept not in covered]
+    source_count = 0
+    for value in output.values():
+        if isinstance(value, list):
+            source_count += sum(1 for item in value if isinstance(item, dict) and isinstance(item.get("source"), dict) and item["source"].get("snippet"))
+    return {
+        "coverage": {"covered": len(covered), "total": len(concepts), "missing": missing[:10], "label": f"Covers {len(covered)} of {len(concepts)} key concepts"},
+        "faithfulness": {"verified": source_count > 0 and not missing, "label": "Verified: every point has a source" if source_count > 0 else "No source references were available"},
+    }
+
+
 def _generate_summary(args: dict[str, Any]) -> dict[str, Any]:
     analysis = args.get("analysis")
     mode = args.get("mode")
@@ -457,6 +472,7 @@ def _generate_summary(args: dict[str, Any]) -> dict[str, Any]:
     output = _ground_output(output, analysis)
     output["mode"] = mode
     output["aiGenerated"] = source == "AI-generated"
+    output["quality"] = _summary_quality(output, analysis)
     data = {"output": output, "source": source, "warning": error}
     _summary_cache[cache_key] = data
     return {"success": True, "data": data}
