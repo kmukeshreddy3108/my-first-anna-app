@@ -6,7 +6,7 @@ const TOOL_ID = window.__ANNA_TOOL_IDS__?.summarizer || "tool-dev-my-first-anna-
 let cancelled = false;
 let heartbeatTimer = null;
 let lastError = null;
-let current = { text: "", analysis: null, outputs: {}, critique: null, chat: [], files: [] };
+let current = { text: "", analysis: null, outputs: {}, critique: null, chat: [], files: [], sourceMap: [] };
 let savedHistory = [];
 const app = () => document.getElementById("app");
 const escapeHtml = value => String(value ?? "").replace(/[&<>"']/g, char => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[char]));
@@ -30,7 +30,7 @@ const invoke = (method, args, options) => api.invoke(method, args, options);
 async function saveRuntimeState() {
   if (!current.analysis) return;
   try {
-    await api.storageSet({ key: "studylens:last-analysis", value: { text: current.text, analysis: current.analysis, outputs: current.outputs, critique: current.critique, chat: current.chat } });
+    await api.storageSet({ key: "studylens:last-analysis", value: { text: current.text, analysis: current.analysis, outputs: current.outputs, critique: current.critique, chat: current.chat, files: current.files, sourceMap: current.sourceMap } });
   } catch (error) {
     console.error("StudyLens runtime storage unavailable", error);
   }
@@ -81,6 +81,12 @@ async function addFiles(files, text, updateCount) {
   const results = await ingest(files);
   current.files = [...current.files, ...results];
   const usable = current.files.filter(item => item.status === "ok" && item.text);
+  let offset = 0;
+  current.sourceMap = usable.map(item => {
+    const entry = { file: item.name, section: item.detectedKind, start: offset, end: offset + item.text.length };
+    offset += item.text.length + item.name.length + 8;
+    return entry;
+  });
   text.value = usable.map(item => `--- ${item.name} ---\n${item.text}`).join("\n\n");
   updateCount();
   status.textContent = `${usable.length} usable file${usable.length === 1 ? "" : "s"} ready. Review the extracted text before analyzing.`;
@@ -101,7 +107,7 @@ async function analyze(rawText) {
   if (!text) return status && (status.textContent = "Paste or upload a document first.", status.className = "error");
   if (text.length < 20) return status && (status.textContent = "Please provide at least 20 characters.", status.className = "error");
   if (text.length > 120000) return status && (status.textContent = "This document is over the 120,000-character limit.", status.className = "error");
-  cancelled = false; current = { text, analysis: null, outputs: {}, critique: null, chat: [] };
+  cancelled = false; current = { text, analysis: null, outputs: {}, critique: null, chat: [], files: current.files, sourceMap: current.sourceMap };
   app().innerHTML = pipeline();
   document.getElementById("cancel-btn").onclick = () => { cancelled = true; document.getElementById("progress-status").textContent = "Cancellation requested..."; };
   let active = "step-analyze";
@@ -112,7 +118,7 @@ async function analyze(rawText) {
     let cursor = 0;
     let combined = null;
     do {
-      const result = await invoke("analyze_document", { text, cursor, max_chunks: 3 });
+      const result = await invoke("analyze_document", { text, cursor, max_chunks: 3, source_map: current.sourceMap });
       const part = result.analysis || {};
       combined = combined || { ...part, keyPoints: [], entities: [], definitions: [], openQuestions: [], chunks: [] };
       for (const key of ["keyPoints", "entities", "definitions", "openQuestions", "chunks"]) combined[key].push(...(part[key] || []));

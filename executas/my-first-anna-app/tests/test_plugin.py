@@ -111,6 +111,19 @@ def test_grounded_outputs_quiz_grading_export_and_cache(monkeypatch):
     assert exported["data"]["content"].startswith("# ")
 
 
+def test_source_map_is_preserved_in_citations(monkeypatch):
+    monkeypatch.setattr(plugin, "_sampling_enabled", False)
+    text = "--- one.txt ---\nAlpha facts are verified.\n\n--- two.txt ---\nBeta facts are verified."
+    source_map = [
+        {"file": "one.txt", "section": "txt", "start": 0, "end": 42},
+        {"file": "two.txt", "section": "txt", "start": 42, "end": len(text)},
+    ]
+    result = plugin._analyze({"text": text, "source_map": source_map})
+    references = [item["source"] for item in result["data"]["analysis"]["keyPoints"]]
+    assert references
+    assert all(reference.get("file") for reference in references)
+
+
 def test_history_rename_and_search(monkeypatch, tmp_path):
     monkeypatch.setattr(plugin, "STORE_PATH", tmp_path / "analyses.json")
     saved = plugin._persist("save_analysis", {"title": "Photosynthesis notes", "analysis": {"keyPoints": []}})

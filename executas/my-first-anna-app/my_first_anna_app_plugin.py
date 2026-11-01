@@ -227,36 +227,58 @@ def _fallback_analysis(text: str) -> dict[str, Any]:
     }
 
 
-def _source_ref(text: str, statement: str, index: int, chunks: list[str] | None = None) -> dict[str, Any]:
+def _source_ref(
+    text: str,
+    statement: str,
+    index: int,
+    chunks: list[str] | None = None,
+    source_map: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     chunks = chunks or _chunks(text)
     location = next((i for i, chunk in enumerate(chunks) if statement[:40].lower() in chunk.lower()), index % max(1, len(chunks)))
-    return {"chunkId": f"chunk-{location + 1}", "snippet": chunks[location][:240]}
+    reference = {"chunkId": f"chunk-{location + 1}", "snippet": chunks[location][:240]}
+    position = text.lower().find(statement[:40].lower())
+    if source_map:
+        match = next((item for item in source_map if item.get("start", 0) <= max(0, position) < item.get("end", 0)), None)
+        if match:
+            reference.update({key: match[key] for key in ("file", "section", "page", "sheet", "slide") if key in match})
+            reference["snippet"] = f"{match.get('file', 'source')}: {reference['snippet']}"
+    return reference
 
 
 def _point_text(point: Any) -> str:
     return str(point.get("text", "") if isinstance(point, dict) else point).strip()
 
 
-def _ensure_references(analysis: dict[str, Any], text: str) -> dict[str, Any]:
+def _ensure_references(analysis: dict[str, Any], text: str, source_map: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     points = analysis.get("keyPoints", [])
     normalized = []
     for index, point in enumerate(points if isinstance(points, list) else []):
         statement = _point_text(point)
         if statement:
-            reference = point.get("source") if isinstance(point, dict) else None
-            normalized.append({"text": statement, "source": reference or _source_ref(text, statement, index)})
+            existing = point.get("source") if isinstance(point, dict) else None
+            mapped = _source_ref(text, statement, index, source_map=source_map)
+            reference = {**mapped, **(existing or {})}
+            if mapped.get("file"):
+                reference["file"] = mapped["file"]
+                reference["section"] = mapped.get("section", reference.get("section"))
+                if not str(reference.get("snippet", "")).startswith(f"{mapped['file']}:"):
+                    reference["snippet"] = f"{mapped['file']}: {reference.get('snippet', '')}"
+            normalized.append({"text": statement, "source": reference})
     analysis["keyPoints"] = normalized
     analysis.setdefault("chunks", [{"id": "chunk-1", "snippet": text[:240]}])
     return analysis
 
 
-def _analysis_cache_key(text: str) -> str:
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+def _analysis_cache_key(text: str, source_map: list[dict[str, Any]] | None = None) -> str:
+    material = text + json.dumps(source_map or [], ensure_ascii=True, sort_keys=True)
+    return hashlib.sha256(material.encode("utf-8")).hexdigest()
 
 
 def _analyze(args: dict[str, Any]) -> dict[str, Any]:
     text = _validate_text(args.get("text"))
-    cache_key = _analysis_cache_key(text)
+    source_map = args.get("source_map") if isinstance(args.get("source_map"), list) else []
+    cache_key = _analysis_cache_key(text, source_map)
     cursor = max(0, int(args.get("cursor", 0)))
     max_chunks = max(1, min(int(args.get("max_chunks", MAX_CHUNKS_PER_CALL)), MAX_CHUNKS_PER_CALL))
     all_chunks = _chunks(text)
@@ -296,7 +318,8 @@ def _analyze(args: dict[str, Any]) -> dict[str, Any]:
         source = "AI-generated" if sources == {"AI-generated"} else "rule-based"
         error = "; ".join(errors) if errors else None
     analysis.setdefault("sourceLength", len(text))
-    analysis = _ensure_references(analysis, text)
+    analysis = _ensure_references(analysis, text, source_map)
+    analysis["sourceMap"] = source_map
     complete = cursor + max_chunks >= len(all_chunks)
     if complete:
         _analysis_cache[cache_key] = analysis
