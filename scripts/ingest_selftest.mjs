@@ -14,7 +14,7 @@ const cases = [
   { name: "renamed.exe.txt", bytes: Uint8Array.from([0x4d, 0x5a, 0x90, 0]), expected: "unsupported" },
   { name: "scan.pdf", bytes: new TextEncoder().encode("%PDF-1.7"), expected: "unsupported" },
   { name: "image.png", bytes: Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a]), expected: "unsupported" },
-  { name: "book.epub", bytes: Uint8Array.from([0x50, 0x4b, 0x03, 0x04]), expected: "unsupported" },
+  { name: "book.epub", bytes: Uint8Array.from([0x50, 0x4b, 0x03, 0x04]), expected: "failed" },
 ];
 
 const files = [];

@@ -257,6 +257,7 @@ async function ingestOne(file, options) {
       return { ...base, detectedKind: "pdf", status: "failed", text: "", warnings: ["This PDF could not be read. Try a text-based PDF or a smaller file."] };
     }
   }
+  if (sig === "pdf") return { ...base, detectedKind: "pdf", status: "unsupported", text: "", warnings: ["PDF parsing requires the Anna plugin bridge. If the bridge is unavailable, use a text-based document or reconnect."] };
   if (sig === "office-binary" || sig === "image" || UNSUPPORTED_EXTENSIONS.has(ext)) {
     const label = sig === "image" ? "Image OCR is not available in this offline environment." : "This legacy or binary format is not supported. Try DOCX, PPTX, XLSX, ODT, EPUB, or PDF.";
     return { ...base, detectedKind: sig === "text-or-unknown" ? ext : sig, status: "unsupported", text: "", warnings: [label] };
