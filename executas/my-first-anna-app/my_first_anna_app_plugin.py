@@ -14,6 +14,8 @@ for _stream in (sys.stdin, sys.stdout, sys.stderr):
 import concurrent.futures
 import hashlib
 import json
+import logging
+from logging.handlers import RotatingFileHandler
 import os
 import queue
 import re
@@ -27,8 +29,10 @@ from typing import Any
 
 MAX_TEXT_CHARS = 120_000
 CHUNK_CHARS = 12_000
-SAMPLE_TIMEOUT = 45
+SAMPLE_TIMEOUT = 18
+MAX_CHUNKS_PER_CALL = 3
 STORE_PATH = Path(os.environ.get("ANNA_ANALYST_STORE", Path.home() / ".anna-study-analyses.json"))
+LOG_PATH = Path(os.environ.get("ANNA_ANALYST_LOG", Path(__file__).resolve().parent / "logs" / "plugin.log"))
 
 MANIFEST: dict[str, Any] = {
     "display_name": "tool-dev-my-first-anna-app",
@@ -61,8 +65,22 @@ _responses: dict[str, queue.Queue[dict[str, Any]]] = {}
 _requests: queue.Queue[dict[str, Any]] = queue.Queue()
 _sampling_enabled = True
 _store_lock = threading.Lock()
-TOOL_TIMEOUT = 120
+TOOL_TIMEOUT = 55
 _analysis_cache: dict[str, dict[str, Any]] = {}
+
+
+def _configure_logging() -> logging.Logger:
+    LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    logger = logging.getLogger("studylens.plugin")
+    logger.setLevel(logging.INFO)
+    if not logger.handlers:
+        handler = RotatingFileHandler(LOG_PATH, maxBytes=1_000_000, backupCount=3, encoding="utf-8")
+        handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+        logger.addHandler(handler)
+    return logger
+
+
+_logger = _configure_logging()
 
 
 def _write(value: dict[str, Any]) -> None:
@@ -72,21 +90,25 @@ def _write(value: dict[str, Any]) -> None:
 
 def _log(message: str) -> None:
     print(message, file=sys.stderr, flush=True)
+    _logger.info(message)
 
 
 def _reader() -> None:
-    for raw in sys.stdin:
-        try:
-            message = json.loads(raw)
-            if not isinstance(message, dict):
-                raise ValueError("JSON-RPC message must be an object")
-            request_id = message.get("id")
-            if "method" not in message and request_id in _responses:
-                _responses[request_id].put(message)
-            else:
-                _requests.put(message)
-        except (json.JSONDecodeError, ValueError) as error:
-            _log(f"invalid input: {error}")
+    try:
+        for raw in sys.stdin:
+            try:
+                message = json.loads(raw)
+                if not isinstance(message, dict):
+                    raise ValueError("JSON-RPC message must be an object")
+                request_id = message.get("id")
+                if "method" not in message and request_id in _responses:
+                    _responses[request_id].put(message)
+                else:
+                    _requests.put(message)
+            except (json.JSONDecodeError, ValueError) as error:
+                _log(f"invalid input: {error}")
+    finally:
+        _requests.put({"_eof": True})
 
 
 def _sample(prompt: str, max_tokens: int = 900) -> tuple[str | None, str | None]:
@@ -234,10 +256,13 @@ def _analysis_cache_key(text: str) -> str:
 def _analyze(args: dict[str, Any]) -> dict[str, Any]:
     text = _validate_text(args.get("text"))
     cache_key = _analysis_cache_key(text)
-    if cache_key in _analysis_cache:
+    cursor = max(0, int(args.get("cursor", 0)))
+    max_chunks = max(1, min(int(args.get("max_chunks", MAX_CHUNKS_PER_CALL)), MAX_CHUNKS_PER_CALL))
+    all_chunks = _chunks(text)
+    if cursor == 0 and cache_key in _analysis_cache and len(all_chunks) <= MAX_CHUNKS_PER_CALL:
         return {"success": True, "data": {"analysis": _analysis_cache[cache_key], "source": "cache", "warning": None, "documentHash": cache_key}}
     fallback = _fallback_analysis(text)
-    if len(_chunks(text)) == 1:
+    if len(all_chunks) == 1:
         analysis, source, error = _sample_json(
             "Analyze this document. Return JSON with keys documentType (article, lecture notes, meeting, report, other), "
             "title (string), keyPoints (array of concise factual strings), entities (array of name/type objects), definitions "
@@ -245,23 +270,39 @@ def _analyze(args: dict[str, Any]) -> dict[str, Any]:
             fallback,
         )
     else:
-        partials = []
-        for chunk in _chunks(text):
-            partial, _, _ = _sample_json("Extract factual keyPoints, entities, definitions, and openQuestions from this document chunk as JSON. Do not invent facts.\n\n" + chunk, fallback)
-            partials.append(partial)
-        merged = {
+        selected = all_chunks[cursor:cursor + max_chunks]
+        def analyze_chunk(chunk: str) -> tuple[dict[str, Any], str, str | None]:
+            return _sample_json(
+                "Extract factual keyPoints, entities, definitions, and openQuestions from this document chunk as JSON. "
+                "Keep the response compact and do not invent facts.\n\n" + chunk,
+                _fallback_analysis(chunk),
+                max_tokens=700,
+            )
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_chunks) as pool:
+            results = list(pool.map(analyze_chunk, selected))
+        partials = [result[0] for result in results]
+        sources = {result[1] for result in results}
+        errors = [result[2] for result in results if result[2]]
+        analysis = {
             "documentType": "other",
+            "title": fallback["title"],
             "keyPoints": [item for partial in partials for item in partial.get("keyPoints", [])][:40],
             "entities": [item for partial in partials for item in partial.get("entities", [])][:40],
             "definitions": [item for partial in partials for item in partial.get("definitions", [])][:40],
             "openQuestions": [item for partial in partials for item in partial.get("openQuestions", [])][:30],
             "sourceLength": len(text),
         }
-        analysis, source, error = _sample_json("Classify and deduplicate this combined document analysis as JSON. Use only its facts.\n\n" + json.dumps(merged), merged)
+        source = "AI-generated" if sources == {"AI-generated"} else "rule-based"
+        error = "; ".join(errors) if errors else None
     analysis.setdefault("sourceLength", len(text))
     analysis = _ensure_references(analysis, text)
-    _analysis_cache[cache_key] = analysis
-    return {"success": True, "data": {"analysis": analysis, "source": source, "warning": error, "documentHash": cache_key}}
+    complete = cursor + max_chunks >= len(all_chunks)
+    if complete:
+        _analysis_cache[cache_key] = analysis
+    data = {"analysis": analysis, "source": source, "warning": error, "documentHash": cache_key, "complete": complete}
+    if not complete:
+        data["nextCursor"] = cursor + max_chunks
+    return {"success": True, "data": data}
 
 
 def _fallback_items(analysis: dict[str, Any]) -> list[dict[str, Any]]:
@@ -475,6 +516,8 @@ def _invoke(method: str, args: dict[str, Any]) -> dict[str, Any]:
 
 def _dispatch(envelope: dict[str, Any]) -> None:
     request_id = envelope.get("id")
+    started = time.monotonic()
+    tool_name = str(envelope.get("params", {}).get("tool", "")) if isinstance(envelope.get("params"), dict) else ""
     try:
         method = envelope.get("method")
         if method == "initialize":
@@ -505,8 +548,10 @@ def _dispatch(envelope: dict[str, Any]) -> None:
         else:
             raise ValueError(f"Unknown RPC method: {method}")
         _write({"jsonrpc": "2.0", "id": request_id, "result": result})
+        _logger.info("request_id=%s tool=%s duration_ms=%d status=ok", request_id, tool_name, int((time.monotonic() - started) * 1000))
     except Exception as error:
         _log(f"request failed: {error}")
+        _logger.exception("request_id=%s tool=%s duration_ms=%d status=error", request_id, tool_name, int((time.monotonic() - started) * 1000))
         _write({
             "jsonrpc": "2.0",
             "id": request_id,
@@ -523,11 +568,15 @@ def main() -> None:
         threading.Thread(target=_reader, daemon=True).start()
         while True:
             try:
-                _dispatch(_requests.get(timeout=60))
+                envelope = _requests.get(timeout=60)
+                if envelope.get("_eof"):
+                    return
+                _dispatch(envelope)
             except queue.Empty:
                 continue
     except Exception:
         traceback.print_exc(file=sys.stderr)
+        _logger.exception("plugin main loop failed")
         raise
 
 

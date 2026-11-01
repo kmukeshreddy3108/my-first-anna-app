@@ -1,0 +1,6 @@
+{
+  "private": true,
+  "scripts": {
+    "selftest": "executas\\my-first-anna-app\\.venv\\Scripts\\python.exe scripts\\selftest.py"
+  }
+}

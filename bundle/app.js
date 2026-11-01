@@ -1,7 +1,16 @@
 import { AnnaAppRuntime } from "/static/anna-apps/_sdk/latest/index.js";
 
 const TOOL_ID = window.__ANNA_TOOL_IDS__?.summarizer || "tool-dev-my-first-anna-app";
-const sampleText = "Renewable energy is becoming more affordable as solar and wind technology improves. Governments are investing in clean power to reduce emissions, but reliable storage remains a challenge. The report recommends expanding grid infrastructure and supporting research into batteries.";
+const sampleFiles = [
+  ["science-photosynthesis", "Science · photosynthesis and carbon"],
+  ["history-industrial-revolution", "History · Industrial Revolution"],
+  ["technology-internet-dns", "Technology · internet and DNS"],
+  ["business-meeting", "Business · launch meeting"],
+  ["health-macronutrients", "Health · macronutrients"],
+  ["mixed-language", "Mixed language · study habits"],
+  ["short-edge", "Edge case · short"],
+  ["long-edge", "Edge case · long"],
+];
 let anna = null;
 let ready = false;
 let cancelled = false;
@@ -16,9 +25,33 @@ const friendlyError = error => {
 };
 async function invoke(method, args) {
   if (!anna || !ready) throw new Error("Connecting to Anna. Please try again.");
-  const data = unwrap(await anna.tools.invoke({ tool_id: TOOL_ID, method, args, timeoutMs: 120000 }));
-  if (data.success === false) throw new Error(typeof data.error === "string" ? data.error : "The request could not be completed.");
-  return data;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const data = unwrap(await anna.tools.invoke({ tool_id: TOOL_ID, method, args, timeoutMs: 55000 }));
+      if (data.success === false) throw new Error(typeof data.error === "string" ? data.error : "The request could not be completed.");
+      return data;
+    } catch (error) {
+      const detail = String(error?.message || error);
+      if (attempt === 0 && (detail.includes("unknown session_id") || detail.includes("-32602"))) {
+        ready = false;
+        const status = document.getElementById("progress-status") || document.getElementById("home-status");
+        if (status) status.textContent = "Session expired, reconnecting...";
+        try {
+          anna = await AnnaAppRuntime.connect();
+          await anna.window.ready();
+          ready = true;
+          continue;
+        } catch (reconnectError) {
+          console.error("Anna session reconnect failed", reconnectError);
+        }
+      }
+      if (detail.includes("unknown session_id") || detail.includes("-32602")) {
+        throw new Error("Your Anna session expired. Please reload the page and try again.");
+      }
+      throw error;
+    }
+  }
+  throw new Error("The request could not be completed.");
 }
 async function saveRuntimeState() {
   if (!anna?.storage?.set || !current.analysis) return;
@@ -38,12 +71,18 @@ function renderItems(items, field = "text") {
 }
 function renderHome() {
   app().innerHTML = `<section class="hero"><div class="card"><span class="eyebrow">AI study workspace</span><h2>Turn one document into a learning kit</h2><p>Paste lecture notes, an article, transcript, or report. StudyLens stays grounded in your source and shows citations instead of guessing.</p><div class="notice">Every generated block is labelled. Unsupported questions receive “Not found in your document.”</div></div><div class="card"><h3>How it works</h3><p>1. Analyze the source</p><p>2. Generate summaries and practice</p><p>3. Verify claims against passages</p><p>4. Save your study kit</p></div></section>
-  <section class="card"><h2>New analysis</h2><label for="source-text"><strong>Document text</strong></label><textarea id="source-text" placeholder="Paste at least 20 characters...">${escapeHtml(current.text)}</textarea><div class="input-meta muted"><span id="count">0 characters</span><span>Limit: 120,000 characters</span></div><div id="file-status" class="muted"></div><div id="dropzone" class="dropzone">Drop a TXT or MD file here, or <button id="file-btn" class="ghost" type="button">choose a file</button><input id="file-input" type="file" accept=".txt,.md,text/plain,text/markdown" hidden></div><div class="actions"><button id="sample-btn" class="secondary" type="button">Use sample document</button><button id="analyze-btn" type="button" ${ready ? "" : "disabled"}>Analyze document</button></div><p id="home-status" class="muted" aria-live="polite">${ready ? "Ready." : "Connecting to Anna..."}</p></section>`;
+  <section class="card"><h2>New analysis</h2><label for="source-text"><strong>Document text</strong></label><textarea id="source-text" placeholder="Paste at least 20 characters...">${escapeHtml(current.text)}</textarea><div class="input-meta muted"><span id="count">0 characters</span><span>Limit: 120,000 characters</span></div><div id="file-status" class="muted"></div><div id="dropzone" class="dropzone">Drop a TXT or MD file here, or <button id="file-btn" class="ghost" type="button">choose a file</button><input id="file-input" type="file" accept=".txt,.md,text/plain,text/markdown" hidden></div><div class="actions"><label>Try a sample <select id="sample-select"><option value="">Choose a document</option><option value="random">Surprise me</option>${sampleFiles.map(([id,label]) => `<option value="${id}">${label}</option>`).join("")}</select></label><button id="analyze-btn" type="button" ${ready ? "" : "disabled"}>Analyze document</button></div><p id="home-status" class="muted" aria-live="polite">${ready ? "Ready." : "Connecting to Anna..."}</p></section>`;
   const text = document.getElementById("source-text");
   const count = document.getElementById("count");
   const updateCount = () => { count.textContent = `${text.value.length.toLocaleString()} characters`; };
   text.addEventListener("input", updateCount); updateCount();
-  document.getElementById("sample-btn").onclick = () => { text.value = sampleText; updateCount(); };
+  document.getElementById("sample-select").onchange = async event => {
+    const selected = event.target.value;
+    if (!selected) return;
+    const id = selected === "random" ? sampleFiles[Math.floor(Math.random() * sampleFiles.length)][0] : selected;
+    try { text.value = await (await fetch(`samples/${id}.md`)).text(); updateCount(); }
+    catch (error) { document.getElementById("file-status").textContent = "Sample could not be loaded. Paste your own text or use file upload."; document.getElementById("file-status").className = "error"; console.error("Sample load failed", error); }
+  };
   document.getElementById("file-btn").onclick = () => document.getElementById("file-input").click();
   document.getElementById("file-input").onchange = event => loadFile(event.target.files[0], text, updateCount);
   const dropzone = document.getElementById("dropzone");
@@ -72,7 +111,19 @@ async function analyze(rawText) {
   document.getElementById("cancel-btn").onclick = () => { cancelled = true; document.getElementById("progress-status").textContent = "Cancellation requested..."; };
   let active = "step-analyze";
   try {
-    setStep(active, "active"); current.analysis = (await invoke("analyze_document", { text })).analysis;
+    setStep(active, "active");
+    let cursor = 0;
+    let combined = null;
+    do {
+      const result = await invoke("analyze_document", { text, cursor, max_chunks: 3 });
+      const part = result.analysis || {};
+      combined = combined || { ...part, keyPoints: [], entities: [], definitions: [], openQuestions: [], chunks: [] };
+      for (const key of ["keyPoints", "entities", "definitions", "openQuestions", "chunks"]) combined[key].push(...(part[key] || []));
+      combined.title = combined.title || part.title;
+      combined.sourceLength = part.sourceLength;
+      cursor = result.nextCursor ?? 0;
+    } while (cursor && !cancelled);
+    current.analysis = combined;
     if (cancelled) throw new Error("Analysis cancelled.");
     setStep(active, "done"); active = "step-generate"; setStep(active, "active"); document.getElementById("progress-status").textContent = "Generating a grounded summary...";
     const summary = await invoke("generate_summary", { analysis: current.analysis, mode: "short" }); current.outputs.short = summary.output;
