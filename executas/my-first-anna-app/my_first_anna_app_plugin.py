@@ -556,8 +556,8 @@ def _parse_pdf(args: dict[str, Any]) -> dict[str, Any]:
         source_map.append({"file": args.get("name") or "document.pdf", "page": number, "start": offset, "end": offset + len(page_text), "snippet": text[:240]})
         offset += len(page_text) + 2
     if not pages:
-        return {"success": True, "data": {"status": "unsupported", "text": "", "pages": [], "sourceMap": [], "warnings": ["This PDF appears to be scanned or has no selectable text. OCR is not available offline."]}}
-    return {"success": True, "data": {"status": "ok", "text": "\n\n".join(f"[Page {item['page']}]\n{item['text']}" for item in pages), "pages": pages, "sourceMap": source_map, "warnings": []}}
+        return {"success": True, "data": {"name": args.get("name") or "document.pdf", "status": "unsupported", "text": "", "pages": [], "sourceMap": [], "warnings": ["This PDF appears to be scanned or has no selectable text. OCR is not available offline."]}}
+    return {"success": True, "data": {"name": args.get("name") or "document.pdf", "status": "ok", "text": "\n\n".join(f"[Page {item['page']}]\n{item['text']}" for item in pages), "pages": pages, "sourceMap": source_map, "warnings": []}}
 
 
 def _invoke(method: str, args: dict[str, Any]) -> dict[str, Any]:

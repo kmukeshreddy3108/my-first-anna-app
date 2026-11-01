@@ -95,10 +95,10 @@ async function addFiles(files, text, updateCount) {
   let offset = 0;
   current.sourceMap = usable.map(item => {
     const header = `--- ${item.name} ---\n`;
-    const entry = { file: item.name, section: item.detectedKind, start: offset, end: offset + header.length + item.text.length };
+    const entries = (item.sourceMap?.length ? item.sourceMap : [{ file: item.name, section: item.detectedKind, start: 0, end: item.text.length, snippet: item.text.slice(0, 240) }]).map(source => ({ ...source, file: item.name, start: offset + header.length + source.start, end: offset + header.length + source.end }));
     offset += header.length + item.text.length + 2;
-    return entry;
-  });
+    return entries;
+  }).flat();
   text.value = usable.map(item => `--- ${item.name} ---\n${item.text}`).join("\n\n");
   updateCount();
   const words = usable.reduce((sum, item) => sum + item.text.trim().split(/\s+/).filter(Boolean).length, 0);

@@ -138,6 +138,7 @@ async function readZip(bytes) {
   let cursor = centralOffset;
   let total = 0;
   for (let i = 0; i < entries; i += 1) {
+    if (i && i % 50 === 0) await new Promise(resolve => setTimeout(resolve, 0));
     if (u32(view, cursor) !== 0x02014b50) throw new Error("The document archive has an invalid directory.");
     const flags = u16(view, cursor + 8);
     const method = u16(view, cursor + 10);
@@ -249,8 +250,8 @@ async function ingestOne(file, options) {
   if (sig === "pdf" && typeof options.parsePdf === "function") {
     try {
       const parsed = await options.parsePdf(bytes, file);
-      if (parsed?.status === "ok") return parsed;
-      return { ...base, detectedKind: "pdf", status: parsed?.status || "failed", text: parsed?.text || "", pages: parsed?.pages || [], sourceMap: parsed?.sourceMap || [], warnings: parsed?.warnings || ["This PDF could not be read."] };
+      if (parsed?.status === "ok") return { ...base, ...parsed, name: file.name, size: file.size, type: file.type || base.type, detectedKind: "pdf" };
+      return { ...base, ...parsed, name: file.name, size: file.size, type: file.type || base.type, detectedKind: "pdf", status: parsed?.status || "failed", text: parsed?.text || "", pages: parsed?.pages || [], sourceMap: parsed?.sourceMap || [], warnings: parsed?.warnings || ["This PDF could not be read."] };
     } catch (error) {
       console.error("StudyLens PDF parsing failed", error);
       return { ...base, detectedKind: "pdf", status: "failed", text: "", warnings: ["This PDF could not be read. Try a text-based PDF or a smaller file."] };
