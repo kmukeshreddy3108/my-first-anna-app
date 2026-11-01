@@ -8,10 +8,12 @@ const TEXT_EXTENSIONS = new Set([
   "cpp", "hpp", "cs", "go", "rs", "rb", "php", "sql", "sh", "ps1", "css"
 ]);
 const UNSUPPORTED_EXTENSIONS = new Set([
-  "pdf", "doc", "docx", "ppt", "pptx", "xls", "xlsx", "rtf", "odt", "epub",
+  "doc", "ppt", "xls", "rtf",
   "png", "jpg", "jpeg", "webp", "gif", "bmp", "mp3", "wav", "m4a", "mp4",
   "mov", "avi", "mkv", "exe", "dll", "com", "bat", "cmd"
 ]);
+
+const ZIP_LIMITS = { entries: 2000, uncompressedBytes: 80 * 1024 * 1024 };
 
 function extension(name) {
   const match = /\.([a-z0-9]+)$/i.exec(name || "");
@@ -118,6 +120,124 @@ function sourceMap(name, text, label = "text") {
   return [{ file: name, section: label, start: 0, end: text.length, snippet: text.slice(0, 240) }];
 }
 
+function u16(view, offset) { return view.getUint16(offset, true); }
+function u32(view, offset) { return view.getUint32(offset, true); }
+function zipNameSafe(name) { return name && !name.startsWith("/") && !name.split("/").includes(".."); }
+async function readZip(bytes) {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  let eocd = -1;
+  for (let i = bytes.length - 22; i >= Math.max(0, bytes.length - 65557); i -= 1) {
+    if (u32(view, i) === 0x06054b50) { eocd = i; break; }
+  }
+  if (eocd < 0) throw new Error("The document archive is corrupt or truncated.");
+  const entries = u16(view, eocd + 10);
+  const centralSize = u32(view, eocd + 12);
+  const centralOffset = u32(view, eocd + 16);
+  if (entries > ZIP_LIMITS.entries || centralOffset + centralSize > bytes.length) throw new Error("The document archive is too large or uses unsupported ZIP64 metadata.");
+  const result = new Map();
+  let cursor = centralOffset;
+  let total = 0;
+  for (let i = 0; i < entries; i += 1) {
+    if (u32(view, cursor) !== 0x02014b50) throw new Error("The document archive has an invalid directory.");
+    const flags = u16(view, cursor + 8);
+    const method = u16(view, cursor + 10);
+    const compressedSize = u32(view, cursor + 20);
+    const uncompressedSize = u32(view, cursor + 24);
+    const nameLength = u16(view, cursor + 28);
+    const extraLength = u16(view, cursor + 30);
+    const commentLength = u16(view, cursor + 32);
+    const localOffset = u32(view, cursor + 42);
+    const name = new TextDecoder("utf-8").decode(bytes.slice(cursor + 46, cursor + 46 + nameLength));
+    if (!zipNameSafe(name)) throw new Error("The archive contains an unsafe path.");
+    if (flags & 1) throw new Error("Encrypted document archives are not supported.");
+    if (uncompressedSize > ZIP_LIMITS.uncompressedBytes || total + uncompressedSize > ZIP_LIMITS.uncompressedBytes) throw new Error("The document archive is too large to process safely.");
+    if (method !== 0 && method !== 8) throw new Error(`The archive uses unsupported compression for ${name}.`);
+    const local = localOffset;
+    if (u32(view, local) !== 0x04034b50) throw new Error("The document archive has an invalid file entry.");
+    const localNameLength = u16(view, local + 26);
+    const localExtraLength = u16(view, local + 28);
+    const start = local + 30 + localNameLength + localExtraLength;
+    const compressed = bytes.slice(start, start + compressedSize);
+    let data;
+    if (method === 0) data = compressed;
+    else data = new Uint8Array(await new Response(new Blob([compressed]).stream().pipeThrough(new DecompressionStream("deflate-raw"))).arrayBuffer());
+    if (data.byteLength !== uncompressedSize) throw new Error(`The archive entry ${name} is truncated.`);
+    total += data.byteLength;
+    result.set(name, data);
+    cursor += 46 + nameLength + extraLength + commentLength;
+  }
+  return result;
+}
+function xmlText(xml) {
+  const doc = new DOMParser().parseFromString(xml, "application/xml");
+  if (doc.querySelector("parsererror")) throw new Error("The document XML is invalid.");
+  return doc;
+}
+function nodeText(node) { return (node?.textContent || "").replace(/\s+/g, " ").trim(); }
+function ooxmlParagraphs(doc, sectionLabel) {
+  const refs = [];
+  let paragraph = 0;
+  doc.querySelectorAll("w\\:p, p").forEach(node => {
+    const text = nodeText(node);
+    if (!text) return;
+    paragraph += 1;
+    const style = node.querySelector("w\\:pStyle, pStyle")?.getAttribute("w:val") || "";
+    const bullet = node.querySelector("w\\:numPr, numPr") ? "• " : "";
+    refs.push({ text: `${bullet}${text}`, source: { section: sectionLabel, paragraph, snippet: text } });
+    if (style.toLowerCase().includes("heading")) refs[refs.length - 1].text = `${style}: ${refs[refs.length - 1].text}`;
+  });
+  doc.querySelectorAll("w\\:tbl, tbl").forEach((table, index) => {
+    const rows = [...table.querySelectorAll("w\\:tr, tr")].map(row => [...row.querySelectorAll("w\\:tc, tc")].map(nodeText).join(" | ")).filter(Boolean);
+    if (rows.length) refs.push({ text: `Table ${index + 1}:\n${rows.join("\n")}`, source: { section: sectionLabel, table: index + 1, snippet: rows[0] } });
+  });
+  return refs;
+}
+async function zipDocument(file, bytes, ext) {
+  const entries = await readZip(bytes);
+  const warnings = ["Images were skipped; text and tables were extracted locally."];
+  let parts = [];
+  if (ext === "docx") {
+    const names = ["word/document.xml", "word/footnotes.xml", "word/header1.xml", "word/footer1.xml"];
+    for (const name of names) if (entries.has(name)) parts.push(...ooxmlParagraphs(xmlText(new TextDecoder().decode(entries.get(name))), name));
+  } else if (ext === "pptx") {
+    const slides = [...entries.keys()].filter(name => /^ppt\/slides\/slide\d+\.xml$/.test(name)).sort((a, b) => Number(a.match(/\d+/)[0]) - Number(b.match(/\d+/)[0]));
+    for (const name of slides) parts.push(...ooxmlParagraphs(xmlText(new TextDecoder().decode(entries.get(name))), name));
+    for (const name of entries.keys()) if (/^ppt\/notesSlides\/notesSlide\d+\.xml$/.test(name)) parts.push(...ooxmlParagraphs(xmlText(new TextDecoder().decode(entries.get(name))), name));
+  } else if (ext === "xlsx") {
+    const shared = entries.has("xl/sharedStrings.xml") ? [...xmlText(new TextDecoder().decode(entries.get("xl/sharedStrings.xml"))).querySelectorAll("si")].map(nodeText) : [];
+    const workbook = entries.has("xl/workbook.xml") ? xmlText(new TextDecoder().decode(entries.get("xl/workbook.xml"))) : null;
+    const sheetNames = workbook ? [...workbook.querySelectorAll("sheet")].map(node => node.getAttribute("name")) : [];
+    const sheets = [...entries.keys()].filter(name => /^xl\/worksheets\/sheet\d+\.xml$/.test(name)).sort();
+    sheets.forEach((name, index) => {
+      const doc = xmlText(new TextDecoder().decode(entries.get(name)));
+      const rows = [...doc.querySelectorAll("row")].slice(0, 200).map(row => [...row.querySelectorAll("c")].map(cell => {
+        const value = nodeText(cell.querySelector("v"));
+        return cell.getAttribute("t") === "s" ? shared[Number(value)] || "" : value;
+      }).join(" | "));
+      parts.push({ text: `Sheet ${sheetNames[index] || index + 1}:\n${rows.join("\n")}${doc.querySelectorAll("row").length > 200 ? "\nSampled first 200 rows." : ""}`, source: { section: sheetNames[index] || `Sheet ${index + 1}`, snippet: rows[0] || "" } });
+    });
+  } else if (ext === "odt") {
+    const doc = xmlText(new TextDecoder().decode(entries.get("content.xml")));
+    parts = [...doc.querySelectorAll("text\\:h, text\\:p, h, p")].map((node, index) => ({ text: nodeText(node), source: { section: "content.xml", paragraph: index + 1, snippet: nodeText(node) } })).filter(item => item.text);
+  } else if (ext === "epub") {
+    const container = entries.get("META-INF/container.xml");
+    const root = container ? xmlText(new TextDecoder().decode(container)).querySelector("rootfile")?.getAttribute("full-path") : "";
+    const opf = root && entries.has(root) ? xmlText(new TextDecoder().decode(entries.get(root))) : null;
+    const base = root ? root.slice(0, root.lastIndexOf("/") + 1) : "";
+    const manifest = new Map(opf ? [...opf.querySelectorAll("item")].map(item => [item.getAttribute("id"), item.getAttribute("href")]) : []);
+    const spine = opf ? [...opf.querySelectorAll("itemref")].map(item => manifest.get(item.getAttribute("idref"))).filter(Boolean) : [];
+    for (const href of spine) {
+      const name = `${base}${decodeURIComponent(href)}`;
+      if (!entries.has(name)) continue;
+      const text = normalize(htmlText(new TextDecoder().decode(entries.get(name))));
+      if (text) parts.push({ text, source: { section: name, snippet: text.slice(0, 240) } });
+    }
+  }
+  const text = parts.map(item => item.text).join("\n\n").slice(0, MAX_TEXT_CHARS);
+  if (!text) throw new Error("No readable text was found in this document.");
+  return { ...file, detectedKind: ext, status: "ok", text, warnings, pages: [], sourceMap: parts.map(item => ({ file: file.name, ...item.source, start: 0, end: item.text.length })) };
+}
+
 async function ingestOne(file, options) {
   const ext = extension(file.name);
   const base = { name: file.name || "pasted-file", size: file.size, type: file.type || "application/octet-stream", detectedKind: ext || "unknown", pages: [], sourceMap: [] };
@@ -126,11 +246,25 @@ async function ingestOne(file, options) {
   const bytes = new Uint8Array(await file.arrayBuffer());
   const sig = signature(bytes);
   if (sig === "executable") return { ...base, detectedKind: "executable", status: "unsupported", text: "", warnings: ["Executable files are never opened or executed."] };
-  if (sig === "pdf" || sig === "office-binary" || sig === "image" || UNSUPPORTED_EXTENSIONS.has(ext)) {
-    const label = sig === "image" ? "Image OCR is not available in this offline environment." : sig === "pdf" ? "PDF parsing is not available in this offline environment." : "This document format needs a parser that is not installed in the Anna sandbox.";
+  if (sig === "pdf" && typeof options.parsePdf === "function") {
+    try {
+      const parsed = await options.parsePdf(bytes, file);
+      if (parsed?.status === "ok") return parsed;
+      return { ...base, detectedKind: "pdf", status: parsed?.status || "failed", text: parsed?.text || "", pages: parsed?.pages || [], sourceMap: parsed?.sourceMap || [], warnings: parsed?.warnings || ["This PDF could not be read."] };
+    } catch (error) {
+      console.error("StudyLens PDF parsing failed", error);
+      return { ...base, detectedKind: "pdf", status: "failed", text: "", warnings: ["This PDF could not be read. Try a text-based PDF or a smaller file."] };
+    }
+  }
+  if (sig === "office-binary" || sig === "image" || UNSUPPORTED_EXTENSIONS.has(ext)) {
+    const label = sig === "image" ? "Image OCR is not available in this offline environment." : "This legacy or binary format is not supported. Try DOCX, PPTX, XLSX, ODT, EPUB, or PDF.";
     return { ...base, detectedKind: sig === "text-or-unknown" ? ext : sig, status: "unsupported", text: "", warnings: [label] };
   }
-  if (sig === "zip") return { ...base, detectedKind: "zip", status: "unsupported", text: "", warnings: ["ZIP extraction requires a safe plugin-side transfer API, which is not available in the current bridge."] };
+  if (sig === "zip" && ["docx", "pptx", "xlsx", "odt", "epub"].includes(ext)) {
+    try { return await zipDocument(base, bytes, ext); }
+    catch (error) { console.error("StudyLens archive parsing failed", error); return { ...base, detectedKind: ext, status: "failed", text: "", warnings: [error.message || "This document archive could not be read safely."] }; }
+  }
+  if (sig === "zip") return { ...base, detectedKind: "zip", status: "unsupported", text: "", warnings: ["This ZIP archive is not a supported document format."] };
   const decoded = decode(bytes);
   let text = normalize(decoded.text, options.nfkc === true);
   let detectedKind = TEXT_EXTENSIONS.has(ext) ? ext : "text";

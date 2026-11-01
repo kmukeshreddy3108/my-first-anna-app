@@ -12,7 +12,9 @@ for _stream in (sys.stdin, sys.stdout, sys.stderr):
         _stream.reconfigure(encoding="utf-8", errors="replace")
 
 import concurrent.futures
+import base64
 import hashlib
+import io
 import json
 import logging
 from logging.handlers import RotatingFileHandler
@@ -26,6 +28,7 @@ import unicodedata
 import uuid
 from pathlib import Path
 from typing import Any
+from pypdf import PdfReader
 
 MAX_TEXT_CHARS = 120_000
 CHUNK_CHARS = 12_000
@@ -56,6 +59,7 @@ MANIFEST: dict[str, Any] = {
         {"name": "list_analyses", "description": "List saved analyses.", "parameters": {"type": "object", "properties": {}, "additionalProperties": False}},
         {"name": "get_analysis", "description": "Get a saved analysis by ID.", "parameters": {"type": "object", "properties": {"id": {"type": "string"}}, "required": ["id"]}},
         {"name": "delete_analysis", "description": "Delete a saved analysis by ID.", "parameters": {"type": "object", "properties": {"id": {"type": "string"}}, "required": ["id"]}},
+        {"name": "parse_pdf", "description": "Extract text and page citations from a PDF supplied as base64 data.", "parameters": {"type": "object", "properties": {"data": {"type": "string"}, "name": {"type": "string"}}, "required": ["data"]}},
         {"name": "rename_analysis", "description": "Rename a saved analysis.", "parameters": {"type": "object", "properties": {"id": {"type": "string"}, "title": {"type": "string"}}, "required": ["id", "title"]}},
         {"name": "search_analyses", "description": "Search saved analyses by title.", "parameters": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]}},
         {"name": "export_analysis", "description": "Export a supplied analysis as Markdown or plain text.", "parameters": {"type": "object", "properties": {"analysis": {"type": "object"}, "format": {"type": "string"}}, "required": ["analysis", "format"]}},
@@ -530,9 +534,37 @@ def _persist(method: str, args: dict[str, Any]) -> dict[str, Any]:
     return {"success": False, "error": "Unknown persistence method."}
 
 
+def _parse_pdf(args: dict[str, Any]) -> dict[str, Any]:
+    encoded = args.get("data")
+    if not isinstance(encoded, str) or not encoded:
+        raise ValueError("PDF data is required.")
+    raw = base64.b64decode(encoded, validate=True)
+    if len(raw) > 20 * 1024 * 1024:
+        raise ValueError("PDF exceeds the 20 MB limit.")
+    reader = PdfReader(io.BytesIO(raw))
+    if reader.is_encrypted:
+        raise ValueError("This PDF is encrypted and requires a password.")
+    pages = []
+    source_map = []
+    offset = 0
+    for number, page in enumerate(reader.pages, 1):
+        text = (page.extract_text() or "").strip()
+        if not text:
+            continue
+        page_text = f"[Page {number}]\n{text}"
+        pages.append({"page": number, "text": text})
+        source_map.append({"file": args.get("name") or "document.pdf", "page": number, "start": offset, "end": offset + len(page_text), "snippet": text[:240]})
+        offset += len(page_text) + 2
+    if not pages:
+        return {"success": True, "data": {"status": "unsupported", "text": "", "pages": [], "sourceMap": [], "warnings": ["This PDF appears to be scanned or has no selectable text. OCR is not available offline."]}}
+    return {"success": True, "data": {"status": "ok", "text": "\n\n".join(f"[Page {item['page']}]\n{item['text']}" for item in pages), "pages": pages, "sourceMap": source_map, "warnings": []}}
+
+
 def _invoke(method: str, args: dict[str, Any]) -> dict[str, Any]:
     if method == "health":
         return {"success": True, "data": {"status": "ready", "modelAvailable": _sampling_enabled}}
+    if method == "parse_pdf":
+        return _parse_pdf(args)
     if method == "analyze_document":
         return _analyze(args)
     if method == "generate_outputs":

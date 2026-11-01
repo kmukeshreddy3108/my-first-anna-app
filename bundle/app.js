@@ -21,6 +21,12 @@ const friendlyError = error => {
   console.error("StudyLens user-visible error", error);
   return error?.message || "The request could not be completed.";
 };
+const bytesToBase64 = bytes => {
+  let binary = "";
+  const chunk = 0x8000;
+  for (let index = 0; index < bytes.length; index += chunk) binary += String.fromCharCode(...bytes.subarray(index, index + chunk));
+  return btoa(binary);
+};
 const api = createApi({
   toolId: TOOL_ID,
   onStatus: setConnectionStatus,
@@ -51,7 +57,7 @@ function renderItems(items, field = "text") {
 }
 function renderHome() {
   app().innerHTML = `<section class="hero"><div class="card"><span class="eyebrow">AI study workspace</span><h2>Turn one document into a learning kit</h2><p>Paste lecture notes, an article, transcript, or report. StudyLens stays grounded in your source and shows citations instead of guessing.</p><div class="notice">Every generated block is labelled. Unsupported questions receive “Not found in your document.”</div></div><div class="card"><h3>How it works</h3><p>1. Analyze the source</p><p>2. Generate summaries and practice</p><p>3. Verify claims against passages</p><p>4. Save your study kit</p></div></section>
-  <section class="card"><h2>New analysis</h2><label for="source-text"><strong>Document text</strong></label><textarea id="source-text" placeholder="Paste text or add any file...">${escapeHtml(current.text)}</textarea><div class="input-meta muted"><span id="count">0 characters</span><span>Text limit: ${INGEST_LIMITS.maxTextChars.toLocaleString()} characters</span></div><div id="file-status" class="muted"></div><div id="dropzone" class="dropzone" tabindex="0" role="button" aria-label="Add files by dropping, choosing, or pasting">Drop any file here, or <button id="file-btn" class="ghost" type="button">choose files</button><input id="file-input" type="file" multiple hidden><div class="muted">You can also paste text or clipboard files. Files are processed locally; extracted text is sent only when you start analysis.</div></div><details><summary>Supported formats and limits</summary><p class="muted">Full: text, source code, CSV/TSV, JSON, XML, HTML. Partial: structured text is rendered as an outline and large tables are sampled. Not available here: PDF, Office, images/OCR, EPUB, audio/video, and ZIP extraction.</p><p class="muted">Maximum ${INGEST_LIMITS.maxFileBytes / 1024 / 1024} MB per file and ${INGEST_LIMITS.maxTotalBytes / 1024 / 1024} MB total.</p></details><div id="file-list" class="file-list"></div><div class="actions"><label>Try a sample <select id="sample-select"><option value="">Choose a document</option><option value="random">Surprise me</option>${sampleFiles.map(([id,label]) => `<option value="${id}">${label}</option>`).join("")}</select></label><button id="analyze-btn" type="button">Analyze document</button></div><p id="home-status" class="muted" aria-live="polite">${api.isConnected() ? "Ready." : "Connecting to Anna..."}</p></section>`;
+  <section class="card"><h2>New analysis</h2><label for="source-text"><strong>Document text</strong></label><textarea id="source-text" placeholder="Paste text or add any file...">${escapeHtml(current.text)}</textarea><div class="input-meta muted"><span id="count">0 characters</span><span>Text limit: ${INGEST_LIMITS.maxTextChars.toLocaleString()} characters</span></div><div id="file-status" class="muted">0 usable files ready / 0 characters</div><div id="dropzone" class="dropzone" tabindex="0" role="button" aria-label="Add files by dropping, choosing, or pasting">Drop any file here, or <button id="file-btn" class="ghost" type="button">choose files</button><input id="file-input" type="file" multiple hidden><div class="muted">You can also paste text or clipboard files. Files are processed locally; extracted text is sent only when you start analysis.</div></div><details><summary>Supported formats and limits</summary><p class="muted">Full: TXT, MD, CSV/TSV, JSON, XML, HTML, source code, DOCX, PPTX, XLSX, ODT, EPUB, and text-layer PDF. Partial: large tables are sampled; PDF pages are cited individually. Scanned PDFs, images/OCR, legacy binary Office files, audio/video, and arbitrary ZIP archives are not supported offline.</p><p class="muted">Maximum ${INGEST_LIMITS.maxFileBytes / 1024 / 1024} MB per file and ${INGEST_LIMITS.maxTotalBytes / 1024 / 1024} MB total.</p></details><div id="file-list" class="file-list"></div><div class="actions"><label>Try a sample <select id="sample-select"><option value="">Choose a document</option><option value="random">Surprise me</option>${sampleFiles.map(([id,label]) => `<option value="${id}">${label}</option>`).join("")}</select></label><button id="analyze-btn" type="button">Analyze document</button></div><p id="home-status" class="muted" aria-live="polite">${api.isConnected() ? "Ready." : "Connecting to Anna..."}</p></section>`;
   const text = document.getElementById("source-text");
   const count = document.getElementById("count");
   const updateCount = () => { count.textContent = `${text.value.length.toLocaleString()} characters`; };
@@ -78,7 +84,12 @@ async function addFiles(files, text, updateCount) {
   if (!files?.length) return;
   status.textContent = `Reading ${files.length} file${files.length === 1 ? "" : "s"} locally...`;
   status.className = "muted";
-  const results = await ingest(files);
+  const results = await ingest(files, {
+    parsePdf: async (bytes, file) => {
+      const response = await invoke("parse_pdf", { data: bytesToBase64(bytes), name: file.name });
+      return response;
+    },
+  });
   current.files = [...current.files, ...results];
   const usable = current.files.filter(item => item.status === "ok" && item.text);
   let offset = 0;
@@ -90,14 +101,16 @@ async function addFiles(files, text, updateCount) {
   });
   text.value = usable.map(item => `--- ${item.name} ---\n${item.text}`).join("\n\n");
   updateCount();
-  status.textContent = `${usable.length} usable file${usable.length === 1 ? "" : "s"} ready. Review the extracted text before analyzing.`;
+  const words = usable.reduce((sum, item) => sum + item.text.trim().split(/\s+/).filter(Boolean).length, 0);
+  const pages = usable.reduce((sum, item) => sum + (item.pages?.length || 0), 0);
+  status.textContent = `${usable.length} usable file${usable.length === 1 ? "" : "s"} ready / ${words.toLocaleString()} words / ${pages || "page count unavailable"} pages. Review the extracted text before analyzing.`;
   renderFileList();
 }
 function renderFileList() {
   const target = document.getElementById("file-list");
   if (!target) return;
   const labels = { ok: "Ready", partial: "Partial", unsupported: "Unsupported", failed: "Failed" };
-  target.innerHTML = current.files.map((item, index) => `<article class="file-item"><div><strong>${escapeHtml(item.name)}</strong><span class="badge ${item.status !== "ok" ? "basic" : ""}">${labels[item.status] || "Failed"}</span><div class="muted">${escapeHtml(item.detectedKind)} · ${item.size.toLocaleString()} bytes</div>${item.warnings?.map(warning => `<div class="muted">${escapeHtml(warning)}</div>`).join("") || ""}</div><button class="ghost remove-file" data-index="${index}" type="button">Remove</button></article>`).join("");
+  target.innerHTML = current.files.map((item, index) => `<article class="file-item"><div><strong>${escapeHtml(item.name)}</strong><span class="badge ${item.status !== "ok" ? "basic" : ""}">${labels[item.status] || "Failed"}</span><div class="muted">${escapeHtml(item.detectedKind)} · ${item.size.toLocaleString()} bytes${item.status === "ok" ? ` · ${item.text.trim().split(/\s+/).filter(Boolean).length.toLocaleString()} words · ${item.pages?.length || "page count unavailable"} pages` : ""}</div>${item.warnings?.map(warning => `<div class="muted">${escapeHtml(warning)}</div>`).join("") || ""}</div><button class="ghost remove-file" data-index="${index}" type="button">Remove</button></article>`).join("");
   target.querySelectorAll(".remove-file").forEach(button => button.onclick = () => { current.files.splice(Number(button.dataset.index), 1); renderFileList(); });
 }
 function pipeline() { return `<section class="card"><h2>Analysis pipeline</h2><div class="progress"><div id="step-analyze" class="step">1. Analyze</div><div id="step-generate" class="step">2. Generate</div><div id="step-verify" class="step">3. Verify</div><div id="step-save" class="step">4. Save</div></div><button id="cancel-btn" class="secondary" type="button">Cancel</button><button id="retry-btn" class="secondary" type="button" hidden>Retry failed step</button><p id="progress-status" class="muted">Starting...</p></section>`; }

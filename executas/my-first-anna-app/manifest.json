@@ -11,6 +11,7 @@
     {"name": "save_analysis", "description": "Save an analysis for later review.", "parameters": {"type": "object", "properties": {"analysis": {"type": "object"}, "title": {"type": "string"}}, "required": ["analysis"]}},
     {"name": "list_analyses", "description": "List saved analyses.", "parameters": {"type": "object", "properties": {}, "additionalProperties": false}},
     {"name": "get_analysis", "description": "Get a saved analysis by ID.", "parameters": {"type": "object", "properties": {"id": {"type": "string"}}, "required": ["id"]}},
-    {"name": "delete_analysis", "description": "Delete a saved analysis by ID.", "parameters": {"type": "object", "properties": {"id": {"type": "string"}}, "required": ["id"]}}
+    {"name": "delete_analysis", "description": "Delete a saved analysis by ID.", "parameters": {"type": "object", "properties": {"id": {"type": "string"}}, "required": ["id"]}},
+    {"name": "parse_pdf", "description": "Extract text and page citations from a PDF supplied as base64 data.", "parameters": {"type": "object", "properties": {"data": {"type": "string"}, "name": {"type": "string"}}, "required": ["data"]}}
   ]
 }
