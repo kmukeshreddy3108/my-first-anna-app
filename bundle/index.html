@@ -3,48 +3,36 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="StudyLens AI turns your documents into a grounded learning kit.">
   <title>StudyLens AI</title>
   <style>
-    :root{font-family:Inter,system-ui,sans-serif;color:#172033;background:#f4f7fb;line-height:1.45}
-    *{box-sizing:border-box}body{margin:0;padding:24px}main{max-width:980px;margin:auto}
-    header{display:flex;align-items:center;gap:14px;margin-bottom:22px}.logo{width:48px;height:48px}
-    h1{margin:0;font-size:28px}h2{font-size:20px;margin:0 0 12px}p{color:#52606d}
-    .card{background:#fff;border:1px solid #dbe3ee;border-radius:14px;padding:20px;box-shadow:0 4px 18px #1720330b;margin-bottom:16px}
-    textarea{width:100%;min-height:230px;padding:14px;border:1px solid #b9c5d6;border-radius:9px;font:inherit;resize:vertical}
-    button,select{font:inherit;border:0;border-radius:8px;padding:10px 14px;cursor:pointer}
-    button{background:#2563eb;color:#fff;font-weight:650}button.secondary{background:#e8eef8;color:#19345f}button:disabled{opacity:.55;cursor:wait}
-    .actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}.muted{color:#66758a;font-size:13px}
-    .error{color:#b42318;background:#fff0ee;border:1px solid #f1b8b0;padding:10px;border-radius:8px}
-    .progress{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:14px 0}.step{padding:9px;border-radius:8px;background:#edf2f8;color:#6b7890;font-size:13px;text-align:center}.step.active{background:#dbeafe;color:#1d4ed8}.step.done{background:#dcfce7;color:#166534}.step.failed{background:#fee2e2;color:#991b1b}
-    .tabs{display:flex;gap:6px;flex-wrap:wrap;border-bottom:1px solid #dbe3ee;margin-bottom:14px}.tab{background:transparent;color:#52606d;border-radius:8px 8px 0 0}.tab.active{background:#2563eb;color:white}
-    pre,.output{white-space:pre-wrap;background:#f7f9fc;padding:14px;border-radius:8px;min-height:100px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.history-item{padding:10px;border-bottom:1px solid #e6ebf2;display:flex;justify-content:space-between;gap:12px}
-    @media(max-width:650px){body{padding:14px}.grid{grid-template-columns:1fr}.progress{grid-template-columns:1fr 1fr}h1{font-size:23px}}
+    :root{font-family:Inter,ui-sans-serif,system-ui,sans-serif;color:#172033;background:#f4f7fb;line-height:1.5}
+    *{box-sizing:border-box}body{margin:0}button,input,select,textarea{font:inherit}
+    button{border:0;border-radius:9px;padding:10px 15px;cursor:pointer;background:#2563eb;color:#fff;font-weight:700}
+    button.secondary{background:#e8eef8;color:#19345f}button.ghost{background:transparent;color:#2563eb}
+    button:disabled{opacity:.55;cursor:not-allowed}a{color:#2563eb;text-decoration:none}
+    .shell{max-width:1120px;margin:auto;padding:20px}.topbar{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-bottom:26px}
+    .brand{display:flex;align-items:center;gap:12px}.logo{width:48px;height:48px}.brand h1{font-size:23px;margin:0}.tagline{margin:0;color:#66758a;font-size:13px}
+    nav{display:flex;gap:5px;flex-wrap:wrap}nav button{background:transparent;color:#52606d;padding:8px 11px}nav button.active{background:#dbeafe;color:#1d4ed8}
+    .hero{display:grid;grid-template-columns:1.4fr .8fr;gap:18px;align-items:stretch}.card{background:#fff;border:1px solid #dbe3ee;border-radius:16px;padding:22px;box-shadow:0 5px 20px #1720330b;margin-bottom:16px}
+    h2{margin:0 0 8px;font-size:21px}h3{margin:18px 0 8px;font-size:16px}p{color:#52606d}.muted{color:#66758a;font-size:13px}.eyebrow{color:#2563eb;font-weight:800;text-transform:uppercase;letter-spacing:.08em;font-size:11px}
+    textarea{width:100%;min-height:260px;padding:14px;border:1px solid #b9c5d6;border-radius:10px;resize:vertical;color:#172033}.input-meta{display:flex;justify-content:space-between;margin-top:6px}
+    .actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}.dropzone{border:2px dashed #b9c5d6;border-radius:10px;padding:17px;text-align:center;margin-top:14px;background:#f8fafc}.dropzone.drag{border-color:#2563eb;background:#eff6ff}
+    .notice{padding:11px;border-radius:9px;background:#eff6ff;color:#1e40af;font-size:13px}.error{padding:11px;border-radius:9px;background:#fff0ee;color:#b42318;border:1px solid #f1b8b0}
+    .progress{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:16px 0}.step{padding:10px;border-radius:9px;background:#edf2f8;color:#6b7890;text-align:center;font-size:13px}.step.active{background:#dbeafe;color:#1d4ed8}.step.done{background:#dcfce7;color:#166534}.step.failed{background:#fee2e2;color:#991b1b}
+    .tabs{display:flex;gap:5px;flex-wrap:wrap;border-bottom:1px solid #dbe3ee;margin-bottom:17px}.tab{background:transparent;color:#52606d;border-radius:8px 8px 0 0}.tab.active{background:#2563eb;color:#fff}
+    .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}.item,.history-item,.chat-message{padding:14px;border:1px solid #e1e8f1;border-radius:11px;background:#fbfcfe;margin-bottom:9px}.item p{margin:5px 0}.citation{font-size:12px;color:#52606d;border-left:3px solid #93c5fd;padding-left:9px;margin-top:8px}.badge{display:inline-block;border-radius:99px;padding:4px 9px;font-size:12px;font-weight:800;background:#dcfce7;color:#166534}.badge.basic{background:#fef3c7;color:#92400e}
+    .history-item{display:flex;justify-content:space-between;gap:12px;align-items:center}.history-item small{display:block;color:#66758a}.empty{text-align:center;padding:30px;color:#66758a}
+    .settings-row{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #e6ebf2;padding:14px 0}.settings-row:last-child{border:0}
+    @media(max-width:760px){.shell{padding:14px}.topbar,.hero{display:block}.topbar nav{margin-top:14px}.grid{grid-template-columns:1fr}.progress{grid-template-columns:1fr 1fr}}
   </style>
   <script src="./anna-tool-ids.js" defer></script>
   <script src="./app.js" type="module"></script>
 </head>
-<body>
-<main>
-  <header><img class="logo" src="./logo.svg" alt="StudyLens AI logo"><div><h1>StudyLens AI</h1><p class="muted">AI Study &amp; Document Analyst</p></div></header>
-  <section class="card">
-    <h2>Turn a document into a study plan</h2>
-    <p>Paste notes, an article, meeting transcript, or report. AI analysis is checked and labelled; if sampling is unavailable, the app tells you clearly.</p>
-    <label for="source-text"><strong>Document text</strong></label>
-    <textarea id="source-text" placeholder="Paste your document here..."></textarea>
-    <div class="actions"><button id="sample-btn" class="secondary" type="button">Use sample document</button><button id="analyze-btn" type="button" disabled>Analyze document</button></div>
-    <p id="status" class="muted" aria-live="polite">Ready.</p>
-  </section>
-  <section id="progress-card" class="card" hidden>
-    <h2>Analysis pipeline</h2><div class="progress"><div id="step-analyze" class="step">1. Analyze</div><div id="step-output" class="step">2. Generate</div><div id="step-critique" class="step">3. Verify</div><div id="step-save" class="step">4. Save</div></div>
-  </section>
-  <section id="results-card" class="card" hidden>
-    <div class="tabs" role="tablist"><button class="tab active" data-tab="summary">Summary</button><button class="tab" data-tab="actions">Action items</button><button class="tab" data-tab="study">Flashcards / Quiz</button><button class="tab" data-tab="ask">Ask questions</button></div>
-    <div id="tab-summary" class="tab-content"><div class="actions"><button data-mode="short" class="secondary">Short summary</button><button data-mode="detailed" class="secondary">Detailed summary</button><button id="copy-btn" class="secondary">Copy</button><button id="export-btn" class="secondary">Export Markdown</button></div><div id="analysis-output" class="output"></div><h3>Verification</h3><div id="critique-output" class="output"></div></div>
-    <div id="tab-actions" class="tab-content" hidden><button data-mode="actions">Generate action items</button><div id="actions-output" class="output"></div></div>
-    <div id="tab-study" class="tab-content" hidden><div class="actions"><button data-mode="flashcards">Flashcards</button><button data-mode="quiz">Quiz</button></div><div id="study-output" class="output"></div></div>
-    <div id="tab-ask" class="tab-content" hidden><label for="question"><strong>Question grounded in this document</strong></label><textarea id="question" style="min-height:80px" placeholder="What is the main conclusion?"></textarea><button id="ask-btn">Ask</button><div id="answer-output" class="output"></div></div>
-  </section>
-  <section class="card"><h2>History</h2><div id="history-list" class="muted">No saved analyses yet.</div></section>
-</main>
-</body>
+<body><main class="shell">
+  <header class="topbar"><a class="brand" href="#/"><img class="logo" src="./logo.svg" alt="StudyLens AI logo"><span><strong class="brand h1">StudyLens AI</strong><span class="tagline">Grounded learning from your documents</span></span></a>
+    <nav aria-label="Primary navigation"><button data-route="/" type="button">New analysis</button><button data-route="/history" type="button">History</button><button data-route="/settings" type="button">Settings</button></nav>
+  </header>
+  <div id="app" aria-live="polite"></div>
+</main></body>
 </html>
