@@ -34,6 +34,12 @@ async function saveRuntimeState() {
     console.error("StudyLens runtime storage unavailable", error);
   }
 }
+function resumePendingAnalysis() {
+  const pending = sessionStorage.getItem("studylens:retry-text");
+  if (!pending) return;
+  sessionStorage.removeItem("studylens:retry-text");
+  window.setTimeout(() => analyze(pending), 250);
+}
 function setRoute(route) { window.history.replaceState(null, "", `#${route}`); render(); }
 function cite(source) { return source?.snippet ? `<div class="citation">Source: ${escapeHtml(source.snippet)}</div>` : ""; }
 function sourceBadge(source) { return `<span class="badge ${source === "rule-based" ? "basic" : ""}">${source === "rule-based" ? "Basic mode (rule-based)" : source === "cache" ? "Cached result" : "AI-generated"}</span>`; }
@@ -138,7 +144,15 @@ async function analyze(rawText) {
     const progressStatus = document.getElementById("progress-status");
     if (progressStatus) { progressStatus.textContent = friendlyError(error); progressStatus.className = "error"; }
     const retry = document.getElementById("retry-btn");
-    if (retry) { retry.hidden = false; retry.onclick = async () => { retry.hidden = true; try { await retryFailed(); } catch (retryError) { setStep(active, "failed"); progressStatus.textContent = friendlyError(retryError); progressStatus.className = "error"; retry.hidden = false; } }; }
+    if (retry) { retry.hidden = false; retry.onclick = async () => {
+      retry.hidden = true;
+      if (error.kind === "session_expired") {
+        sessionStorage.setItem("studylens:retry-text", current.text);
+        window.parent.location.reload();
+        return;
+      }
+      try { await retryFailed(); } catch (retryError) { setStep(active, "failed"); progressStatus.textContent = friendlyError(retryError); progressStatus.className = "error"; retry.hidden = false; }
+    }; }
   }
 }
 function renderResults() {
@@ -178,3 +192,4 @@ render();
 const heartbeat = async () => { const result = await api.health(); if (!result.connected) setConnectionStatus("reconnecting"); };
 heartbeat();
 heartbeatTimer = window.setInterval(heartbeat, 30000);
+resumePendingAnalysis();

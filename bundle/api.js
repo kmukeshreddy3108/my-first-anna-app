@@ -86,7 +86,7 @@ export function createApi({ toolId, onStatus, onError }) {
       const response = await anna.tools.invoke({ tool_id: toolId, method, args, timeoutMs: TIMEOUT_MS });
       const data = response?.data || response?.result?.data || response;
       if (data?.success === false) {
-        throw new ApiError("plugin_error", typeof data.error === "string" ? data.error : "The study service rejected this step.", true);
+        throw new ApiError("plugin_error", "The study service encountered an error. Press Retry to try this step again.", true);
       }
       return data;
     } catch (error) {
@@ -107,8 +107,8 @@ export function createApi({ toolId, onStatus, onError }) {
 
   async function health() {
     try {
-      await invoke("health", {}, { retrySession: false });
-      return { connected: true, modelAvailable: true };
+      const result = await invoke("health", {}, { retrySession: false });
+      return { connected: true, modelAvailable: result?.modelAvailable === true };
     } catch (error) {
       return { connected: false, modelAvailable: false, error };
     }
