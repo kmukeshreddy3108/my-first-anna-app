@@ -134,6 +134,17 @@ def test_generated_references_use_specific_source_passage(monkeypatch):
     assert output["items"][1]["source"]["snippet"] == "Respiration releases energy from food."
 
 
+def test_fallback_deduplicates_headings_and_ranks_important_sentences():
+    analysis = plugin._fallback_analysis(
+        "The Solar System. The Solar System. The Solar System contains the Sun and eight planets. "
+        "The Sun is central. The Sun is central."
+    )
+    texts = [item["text"] for item in analysis["keyPoints"]]
+    assert len(texts) == len(set(texts))
+    assert not any("The Solar System The Solar System" in text for text in texts)
+    assert texts[0] == "The Solar System."
+
+
 def test_source_map_is_preserved_in_citations(monkeypatch):
     monkeypatch.setattr(plugin, "_sampling_enabled", False)
     text = "--- one.txt ---\nAlpha facts are verified.\n\n--- two.txt ---\nBeta facts are verified."

@@ -225,13 +225,39 @@ def _chunks(text: str) -> list[str]:
 
 def _fallback_analysis(text: str) -> dict[str, Any]:
     sentences = [part.strip() for part in re.split(r"(?<=[.!?])\s+", text) if part.strip()]
-    points = sentences[:12]
+    stop_words = {"the", "and", "for", "with", "that", "this", "from", "into", "are", "was", "were", "has", "have"}
+    frequencies: dict[str, int] = {}
+    for word in re.findall(r"[A-Za-z][A-Za-z'-]{2,}", text.lower()):
+        if word not in stop_words:
+            frequencies[word] = frequencies.get(word, 0) + 1
+    candidates: list[tuple[int, str, int]] = []
+    seen: set[str] = set()
+    for index, sentence in enumerate(sentences):
+        cleaned = re.sub(r"^(\s*(?:title|heading)\s*:\s*)+", "", sentence, flags=re.IGNORECASE).strip()
+        words = re.findall(r"[A-Za-z][A-Za-z'-]{2,}", cleaned.lower())
+        normalized = re.sub(r"[^a-z0-9]+", " ", cleaned.lower()).strip()
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        score = sum(frequencies.get(word, 0) for word in words) + max(0, 8 - index)
+        candidates.append((score, cleaned, index))
+    selected = {sentence for _, sentence, _ in sorted(candidates, key=lambda item: item[0], reverse=True)[:12]}
+    points = []
+    emitted: set[str] = set()
+    for sentence in sentences:
+        cleaned = re.sub(r"^(\s*(?:title|heading)\s*:\s*)+", "", sentence, flags=re.IGNORECASE).strip()
+        normalized = re.sub(r"[^a-z0-9]+", " ", cleaned.lower()).strip()
+        if cleaned in selected and normalized not in emitted:
+            emitted.add(normalized)
+            points.append(cleaned)
+    title = points[0][:80] if points else "Untitled document"
+    title = re.sub(r"^(.+?)\s+\1$", r"\1", title, flags=re.IGNORECASE)
     words = re.findall(r"\b[A-Z][a-zA-Z]{2,}\b", text)
     entities = list(dict.fromkeys(words))[:12]
     chunks = _chunks(text)
     return {
         "documentType": "other",
-        "title": points[0][:80] if points else "Untitled document",
+        "title": title,
         "keyPoints": [{"text": point, "source": _source_ref(text, point, index, chunks)} for index, point in enumerate(points)],
         "entities": [{"name": name, "type": "proper noun"} for name in entities],
         "definitions": [],
