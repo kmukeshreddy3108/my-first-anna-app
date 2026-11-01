@@ -12,11 +12,11 @@ for _stream in (sys.stdin, sys.stdout, sys.stderr):
         _stream.reconfigure(encoding="utf-8", errors="replace")
 
 import concurrent.futures
+import hashlib
 import json
 import os
 import queue
 import re
-import sys
 import threading
 import time
 import traceback
@@ -37,13 +37,23 @@ MANIFEST: dict[str, Any] = {
     "host_capabilities": ["llm.sample"],
     "tools": [
         {"name": "analyze_document", "description": "Classify and structurally analyze a document.", "parameters": {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]}},
-        {"name": "generate_outputs", "description": "Generate a summary, action list, flashcards, or quiz from analysis.", "parameters": {"type": "object", "properties": {"analysis": {"type": "object"}, "mode": {"type": "string"}}, "required": ["analysis", "mode"]}},
+        {"name": "generate_summary", "description": "Generate a grounded summary in a selected study mode.", "parameters": {"type": "object", "properties": {"analysis": {"type": "object"}, "mode": {"type": "string"}}, "required": ["analysis", "mode"]}},
+        {"name": "generate_action_items", "description": "Generate grounded study tasks and a study plan.", "parameters": {"type": "object", "properties": {"analysis": {"type": "object"}}, "required": ["analysis"]}},
+        {"name": "generate_flashcards", "description": "Generate grounded flashcards.", "parameters": {"type": "object", "properties": {"analysis": {"type": "object"}, "count": {"type": "integer"}, "difficulty": {"type": "string"}}, "required": ["analysis"]}},
+        {"name": "generate_quiz", "description": "Generate a grounded quiz with concept coverage.", "parameters": {"type": "object", "properties": {"analysis": {"type": "object"}, "count": {"type": "integer"}, "difficulty": {"type": "string"}, "type": {"type": "string"}}, "required": ["analysis"]}},
+        {"name": "grade_quiz", "description": "Grade quiz answers and identify weak concepts.", "parameters": {"type": "object", "properties": {"quiz": {"type": "object"}, "answers": {"type": "object"}}, "required": ["quiz", "answers"]}},
+        {"name": "verify_and_refine", "description": "Verify a draft against source text and return a revised draft.", "parameters": {"type": "object", "properties": {"source_text": {"type": "string"}, "draft": {}}, "required": ["source_text", "draft"]}},
+        {"name": "ask_question", "description": "Answer a grounded question about a document.", "parameters": {"type": "object", "properties": {"source_text": {"type": "string"}, "analysis": {"type": "object"}, "question": {"type": "string"}, "history": {"type": "array"}}, "required": ["source_text", "analysis", "question"]}},
+        {"name": "generate_outputs", "description": "Compatibility wrapper for summary, actions, flashcards, or quiz.", "parameters": {"type": "object", "properties": {"analysis": {"type": "object"}, "mode": {"type": "string"}}, "required": ["analysis", "mode"]}},
         {"name": "critique_and_refine", "description": "Check a draft against source text and revise unsupported or missing content.", "parameters": {"type": "object", "properties": {"source_text": {"type": "string"}, "draft": {}}, "required": ["source_text", "draft"]}},
         {"name": "ask_followup", "description": "Answer a question using only the supplied document analysis.", "parameters": {"type": "object", "properties": {"source_text": {"type": "string"}, "analysis": {"type": "object"}, "question": {"type": "string"}, "history": {"type": "array"}}, "required": ["source_text", "analysis", "question"]}},
         {"name": "save_analysis", "description": "Save an analysis for later review.", "parameters": {"type": "object", "properties": {"analysis": {"type": "object"}, "title": {"type": "string"}}, "required": ["analysis"]}},
         {"name": "list_analyses", "description": "List saved analyses.", "parameters": {"type": "object", "properties": {}, "additionalProperties": False}},
         {"name": "get_analysis", "description": "Get a saved analysis by ID.", "parameters": {"type": "object", "properties": {"id": {"type": "string"}}, "required": ["id"]}},
         {"name": "delete_analysis", "description": "Delete a saved analysis by ID.", "parameters": {"type": "object", "properties": {"id": {"type": "string"}}, "required": ["id"]}},
+        {"name": "rename_analysis", "description": "Rename a saved analysis.", "parameters": {"type": "object", "properties": {"id": {"type": "string"}, "title": {"type": "string"}}, "required": ["id", "title"]}},
+        {"name": "search_analyses", "description": "Search saved analyses by title.", "parameters": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]}},
+        {"name": "export_analysis", "description": "Export a supplied analysis as Markdown or plain text.", "parameters": {"type": "object", "properties": {"analysis": {"type": "object"}, "format": {"type": "string"}}, "required": ["analysis", "format"]}},
     ],
 }
 
@@ -52,6 +62,7 @@ _requests: queue.Queue[dict[str, Any]] = queue.Queue()
 _sampling_enabled = True
 _store_lock = threading.Lock()
 TOOL_TIMEOUT = 120
+_analysis_cache: dict[str, dict[str, Any]] = {}
 
 
 def _write(value: dict[str, Any]) -> None:
@@ -115,23 +126,25 @@ def _clean_json(text: str) -> str:
 
 
 def _sample_json(prompt: str, fallback: dict[str, Any], max_tokens: int = 1200) -> tuple[dict[str, Any], str, str | None]:
-    text, error = _sample(prompt, max_tokens)
-    parsed = None
-    if text:
+    required_keys = set(fallback)
+
+    def parse_candidate(candidate: str | None) -> dict[str, Any] | None:
+        if not candidate:
+            return None
         try:
-            value = json.loads(_clean_json(text))
-            parsed = value if isinstance(value, dict) else None
+            value = json.loads(_clean_json(candidate))
         except (json.JSONDecodeError, TypeError):
-            parsed = None
+            return None
+        if not isinstance(value, dict) or not required_keys.issubset(value):
+            return None
+        return value
+
+    text, error = _sample(prompt, max_tokens)
+    parsed = parse_candidate(text)
     if parsed is None and text:
         retry_text, retry_error = _sample(prompt + "\nReturn valid JSON only. No markdown fences, no commentary.", max_tokens)
         error = retry_error or error
-        if retry_text:
-            try:
-                value = json.loads(_clean_json(retry_text))
-                parsed = value if isinstance(value, dict) else None
-            except (json.JSONDecodeError, TypeError):
-                parsed = None
+        parsed = parse_candidate(retry_text)
         if parsed is None:
             error = error or "The AI returned malformed JSON after one retry."
     if parsed is None:
@@ -175,26 +188,59 @@ def _chunks(text: str) -> list[str]:
 
 def _fallback_analysis(text: str) -> dict[str, Any]:
     sentences = [part.strip() for part in re.split(r"(?<=[.!?])\s+", text) if part.strip()]
-    points = sentences[:8]
+    points = sentences[:12]
     words = re.findall(r"\b[A-Z][a-zA-Z]{2,}\b", text)
     entities = list(dict.fromkeys(words))[:12]
+    chunks = _chunks(text)
     return {
         "documentType": "other",
-        "keyPoints": points,
+        "title": points[0][:80] if points else "Untitled document",
+        "keyPoints": [{"text": point, "source": _source_ref(text, point, index, chunks)} for index, point in enumerate(points)],
         "entities": [{"name": name, "type": "proper noun"} for name in entities],
         "definitions": [],
         "openQuestions": [],
+        "chunks": [{"id": f"chunk-{index + 1}", "snippet": chunk[:240]} for index, chunk in enumerate(chunks)],
         "sourceLength": len(text),
     }
 
 
+def _source_ref(text: str, statement: str, index: int, chunks: list[str] | None = None) -> dict[str, Any]:
+    chunks = chunks or _chunks(text)
+    location = next((i for i, chunk in enumerate(chunks) if statement[:40].lower() in chunk.lower()), index % max(1, len(chunks)))
+    return {"chunkId": f"chunk-{location + 1}", "snippet": chunks[location][:240]}
+
+
+def _point_text(point: Any) -> str:
+    return str(point.get("text", "") if isinstance(point, dict) else point).strip()
+
+
+def _ensure_references(analysis: dict[str, Any], text: str) -> dict[str, Any]:
+    points = analysis.get("keyPoints", [])
+    normalized = []
+    for index, point in enumerate(points if isinstance(points, list) else []):
+        statement = _point_text(point)
+        if statement:
+            reference = point.get("source") if isinstance(point, dict) else None
+            normalized.append({"text": statement, "source": reference or _source_ref(text, statement, index)})
+    analysis["keyPoints"] = normalized
+    analysis.setdefault("chunks", [{"id": "chunk-1", "snippet": text[:240]}])
+    return analysis
+
+
+def _analysis_cache_key(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
 def _analyze(args: dict[str, Any]) -> dict[str, Any]:
     text = _validate_text(args.get("text"))
+    cache_key = _analysis_cache_key(text)
+    if cache_key in _analysis_cache:
+        return {"success": True, "data": {"analysis": _analysis_cache[cache_key], "source": "cache", "warning": None, "documentHash": cache_key}}
     fallback = _fallback_analysis(text)
     if len(_chunks(text)) == 1:
         analysis, source, error = _sample_json(
             "Analyze this document. Return JSON with keys documentType (article, lecture notes, meeting, report, other), "
-            "keyPoints (array of concise factual strings), entities (array of name/type objects), definitions "
+            "title (string), keyPoints (array of concise factual strings), entities (array of name/type objects), definitions "
             "(array of term/meaning objects), and openQuestions (array of strings). Do not invent facts.\n\n" + text,
             fallback,
         )
@@ -213,32 +259,81 @@ def _analyze(args: dict[str, Any]) -> dict[str, Any]:
         }
         analysis, source, error = _sample_json("Classify and deduplicate this combined document analysis as JSON. Use only its facts.\n\n" + json.dumps(merged), merged)
     analysis.setdefault("sourceLength", len(text))
-    return {"success": True, "data": {"analysis": analysis, "source": source, "warning": error}}
+    analysis = _ensure_references(analysis, text)
+    _analysis_cache[cache_key] = analysis
+    return {"success": True, "data": {"analysis": analysis, "source": source, "warning": error, "documentHash": cache_key}}
+
+
+def _fallback_items(analysis: dict[str, Any]) -> list[dict[str, Any]]:
+    return [{"text": _point_text(point), "source": point.get("source", {}) if isinstance(point, dict) else {}} for point in analysis.get("keyPoints", []) if _point_text(point)]
+
+
+def _generate_summary(args: dict[str, Any]) -> dict[str, Any]:
+    analysis = args.get("analysis")
+    mode = args.get("mode")
+    if not isinstance(analysis, dict) or mode not in {"short", "detailed", "bullets", "simple", "exam_notes"}:
+        return {"success": False, "error": "analysis and a supported mode are required."}
+    items = _fallback_items(analysis)
+    limit = 3 if mode == "short" else len(items)
+    fallback = {"mode": mode, "summary": " ".join(item["text"] for item in items[:limit]), "items": items[:limit], "aiGenerated": False}
+    prompt = f"Generate a {mode} study summary. Return JSON with mode, summary, and items; every item must include text and source. Keep facts grounded in the analysis.\n\n{json.dumps(analysis, ensure_ascii=False)}"
+    output, source, error = _sample_json(prompt, fallback)
+    output["mode"] = mode
+    output["aiGenerated"] = source == "AI-generated"
+    return {"success": True, "data": {"output": output, "source": source, "warning": error}}
+
+
+def _generate_action_items(args: dict[str, Any]) -> dict[str, Any]:
+    analysis = args.get("analysis")
+    if not isinstance(analysis, dict):
+        return {"success": False, "error": "analysis is required."}
+    points = _fallback_items(analysis)
+    fallback = {
+        "items": [{"task": f"Review: {point['text']}", "priority": "High" if index == 0 else "Medium", "source": point["source"]} for index, point in enumerate(points)],
+        "studyPlan": [{"topic": point["text"], "estimatedMinutes": 15, "source": point["source"]} for point in points],
+        "aiGenerated": False,
+    }
+    output, source, error = _sample_json(f"Create prioritized study tasks and a study plan from this analysis. Return JSON with items and studyPlan; cite every item.\n{json.dumps(analysis, ensure_ascii=False)}", fallback)
+    output["mode"] = "actions"
+    output["aiGenerated"] = source == "AI-generated"
+    return {"success": True, "data": {"output": output, "source": source, "warning": error}}
+
+
+def _generate_flashcards(args: dict[str, Any]) -> dict[str, Any]:
+    analysis = args.get("analysis")
+    count = max(1, min(int(args.get("count", 10)), 50))
+    points = _fallback_items(analysis if isinstance(analysis, dict) else {})
+    fallback = {"cards": [{"question": f"What is an important point about {point['text'][:60]}?", "answer": point["text"], "source": point["source"], "concept": point["text"][:40]} for point in points[:count]], "aiGenerated": False}
+    output, source, error = _sample_json(f"Create {count} grounded flashcards from this analysis. Every card needs question, answer, concept, and source.\n{json.dumps(analysis, ensure_ascii=False)}", fallback)
+    output["mode"] = "flashcards"
+    output["aiGenerated"] = source == "AI-generated"
+    return {"success": True, "data": {"output": output, "source": source, "warning": error}}
+
+
+def _generate_quiz(args: dict[str, Any]) -> dict[str, Any]:
+    analysis = args.get("analysis")
+    count = max(1, min(int(args.get("count", 5)), 30))
+    points = _fallback_items(analysis if isinstance(analysis, dict) else {})
+    questions = [{"id": str(index + 1), "type": "short-answer", "question": f"State this key point: {point['text']}", "correctAnswer": point["text"], "explanation": "This answer is supported by the cited source.", "options": [], "source": point["source"], "concept": point["text"][:40]} for index, point in enumerate(points[:count])]
+    concepts = [point["text"][:40] for point in points]
+    fallback = {"questions": questions, "coverage": {"covered": len(questions), "total": len(concepts), "label": f"Covers {len(questions)} of {len(concepts)} key concepts"}, "aiGenerated": False}
+    output, source, error = _sample_json(f"Create a grounded quiz with {count} questions. Include type, question, options, correctAnswer, explanation, source, and concept. Cover all key concepts.\n{json.dumps(analysis, ensure_ascii=False)}", fallback)
+    output["mode"] = "quiz"
+    output["aiGenerated"] = source == "AI-generated"
+    return {"success": True, "data": {"output": output, "source": source, "warning": error}}
 
 
 def _generate(args: dict[str, Any]) -> dict[str, Any]:
-    analysis = args.get("analysis")
     mode = args.get("mode")
-    if not isinstance(analysis, dict) or mode not in {"short", "detailed", "actions", "flashcards", "quiz"}:
-        return {"success": False, "error": "analysis and a supported mode are required."}
-    key_points = [str(item).strip() for item in analysis.get("keyPoints", []) if str(item).strip()]
-    if mode == "short":
-        fallback = {
-            "mode": mode,
-            "summary": " ".join(key_points[:3]),
-            "items": key_points[:3],
-        }
-    elif mode == "detailed":
-        fallback = {
-            "mode": mode,
-            "summary": " ".join(key_points),
-            "items": key_points,
-        }
-    else:
-        fallback = {"mode": mode, "items": key_points}
-    prompt = f"Generate {mode} study output from this verified analysis. Return JSON with mode and items. Keep facts grounded in the analysis.\n\n{json.dumps(analysis)}"
-    output, source, error = _sample_json(prompt, fallback)
-    return {"success": True, "data": {"output": output, "source": source, "warning": error}}
+    if mode in {"short", "detailed", "bullets", "simple", "exam_notes"}:
+        return _generate_summary(args)
+    if mode == "actions":
+        return _generate_action_items(args)
+    if mode == "flashcards":
+        return _generate_flashcards(args)
+    if mode == "quiz":
+        return _generate_quiz(args)
+    return {"success": False, "error": "analysis and a supported mode are required."}
 
 
 def _critique(args: dict[str, Any]) -> dict[str, Any]:
@@ -259,6 +354,43 @@ def _ask(args: dict[str, Any]) -> dict[str, Any]:
     fallback = {"answer": "I couldn't find that in the document.", "grounded": False, "evidence": []}
     output, source, error = _sample_json(f"Answer only from this document and analysis. If absent, say it is not in the document. Return JSON with answer, grounded boolean, and evidence array. Question: {question}\nAnalysis: {json.dumps(analysis)}\nDocument:\n{source_text}\nHistory:\n{json.dumps(history[-6:] if isinstance(history, list) else [])}", fallback)
     return {"success": True, "data": {"answer": output, "source": source, "warning": error}}
+
+
+def _grade_quiz(args: dict[str, Any]) -> dict[str, Any]:
+    quiz = args.get("quiz")
+    answers = args.get("answers")
+    if not isinstance(quiz, dict) or not isinstance(answers, dict):
+        return {"success": False, "error": "quiz and answers are required."}
+    questions = quiz.get("questions", [])
+    results = []
+    correct = 0
+    for question in questions if isinstance(questions, list) else []:
+        question_id = str(question.get("id", len(results) + 1))
+        expected = str(question.get("correctAnswer", "")).strip().lower()
+        actual = str(answers.get(question_id, "")).strip()
+        is_correct = bool(expected) and actual.lower() == expected
+        correct += int(is_correct)
+        results.append({"id": question_id, "correct": is_correct, "expected": question.get("correctAnswer", ""), "answer": actual, "concept": question.get("concept", ""), "source": question.get("source", {})})
+    total = len(results)
+    weak = list(dict.fromkeys(item["concept"] for item in results if not item["correct"] and item["concept"]))
+    return {"success": True, "data": {"score": correct, "total": total, "percentage": round(correct * 100 / total) if total else 0, "results": results, "weakAreas": weak, "reviewSections": [item["source"] for item in results if not item["correct"]]}}
+
+
+def _export_text(analysis: dict[str, Any], markdown: bool) -> str:
+    title = str(analysis.get("title") or "StudyLens analysis")
+    points = _fallback_items(analysis)
+    lines = [f"# {title}" if markdown else title, ""]
+    lines.extend((f"- {item['text']}" if markdown else item["text"]) for item in points)
+    return "\n".join(lines).strip() + "\n"
+
+
+def _export_analysis(args: dict[str, Any]) -> dict[str, Any]:
+    analysis = args.get("analysis")
+    export_format = args.get("format")
+    if not isinstance(analysis, dict) or export_format not in {"markdown", "text"}:
+        return {"success": False, "error": "analysis and format (markdown or text) are required."}
+    content = _export_text(analysis, export_format == "markdown")
+    return {"success": True, "data": {"format": export_format, "content": content, "encoding": "utf-8"}}
 
 
 def _read_store() -> list[dict[str, Any]]:
@@ -294,6 +426,20 @@ def _persist(method: str, args: dict[str, Any]) -> dict[str, Any]:
             filtered = [item for item in items if item.get("id") != record_id]
             _write_store(filtered)
             return {"success": len(filtered) != len(items), "data": {"deleted": len(filtered) != len(items)}}
+        if method == "rename_analysis":
+            title = args.get("title")
+            if not isinstance(title, str) or not title.strip():
+                return {"success": False, "error": "title is required."}
+            record = next((item for item in items if item.get("id") == record_id), None)
+            if not record:
+                return {"success": False, "error": "Analysis not found."}
+            record["title"] = title.strip()
+            _write_store(items)
+            return {"success": True, "data": {"analysis": record}}
+        if method == "search_analyses":
+            query = str(args.get("query", "")).strip().lower()
+            matches = [item for item in items if not query or query in str(item.get("title", "")).lower()]
+            return {"success": True, "data": {"analyses": matches}}
     return {"success": False, "error": "Unknown persistence method."}
 
 
@@ -302,11 +448,27 @@ def _invoke(method: str, args: dict[str, Any]) -> dict[str, Any]:
         return _analyze(args)
     if method == "generate_outputs":
         return _generate(args)
+    if method == "generate_summary":
+        return _generate_summary(args)
+    if method == "generate_action_items":
+        return _generate_action_items(args)
+    if method == "generate_flashcards":
+        return _generate_flashcards(args)
+    if method == "generate_quiz":
+        return _generate_quiz(args)
+    if method == "grade_quiz":
+        return _grade_quiz(args)
     if method == "critique_and_refine":
+        return _critique(args)
+    if method == "verify_and_refine":
         return _critique(args)
     if method == "ask_followup":
         return _ask(args)
-    if method in {"save_analysis", "list_analyses", "get_analysis", "delete_analysis"}:
+    if method == "ask_question":
+        return _ask(args)
+    if method == "export_analysis":
+        return _export_analysis(args)
+    if method in {"save_analysis", "list_analyses", "get_analysis", "delete_analysis", "rename_analysis", "search_analyses"}:
         return _persist(method, args)
     return {"success": False, "error": f"Unknown tool: {method}"}
 

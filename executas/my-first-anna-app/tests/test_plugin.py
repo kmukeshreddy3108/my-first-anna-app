@@ -66,7 +66,7 @@ def test_unicode_text_is_normalized_and_protocol_safe(monkeypatch):
     text = 'CO₂ and H₂O: x², “smart quotes”, em—dash, é ñ ü, తెలుగు हिंदी 😀 ≈ ≤ ∑ π.'
     result = plugin._analyze({"text": text})
     assert result["success"] is True
-    assert "CO2" in result["data"]["analysis"]["keyPoints"][0]
+    assert "CO2" in result["data"]["analysis"]["keyPoints"][0]["text"]
     assert "\x00" not in plugin._validate_text(text + "\x00")
 
 
@@ -90,3 +90,31 @@ def test_local_persistence(monkeypatch, tmp_path):
     assert plugin._persist("list_analyses", {})["data"]["analyses"]
     assert plugin._persist("get_analysis", {"id": record_id})["success"]
     assert plugin._persist("delete_analysis", {"id": record_id})["success"]
+
+
+def test_grounded_outputs_quiz_grading_export_and_cache(monkeypatch):
+    monkeypatch.setattr(plugin, "_sampling_enabled", False)
+    text = "Solar panels convert light into electricity. Batteries store energy for later use."
+    first = plugin._analyze({"text": text})
+    second = plugin._analyze({"text": text})
+    analysis = first["data"]["analysis"]
+    assert second["data"]["source"] == "cache"
+    assert analysis["keyPoints"][0]["source"]["chunkId"] == "chunk-1"
+    assert plugin._generate_summary({"analysis": analysis, "mode": "exam_notes"})["success"]
+    assert plugin._generate_action_items({"analysis": analysis})["data"]["output"]["items"]
+    cards = plugin._generate_flashcards({"analysis": analysis, "count": 2})["data"]["output"]
+    assert cards["cards"][0]["source"]
+    quiz = plugin._generate_quiz({"analysis": analysis, "count": 2})["data"]["output"]
+    graded = plugin._grade_quiz({"quiz": quiz, "answers": {"1": quiz["questions"][0]["correctAnswer"]}})
+    assert graded["data"]["score"] == 1
+    exported = plugin._export_analysis({"analysis": analysis, "format": "markdown"})
+    assert exported["data"]["content"].startswith("# ")
+
+
+def test_history_rename_and_search(monkeypatch, tmp_path):
+    monkeypatch.setattr(plugin, "STORE_PATH", tmp_path / "analyses.json")
+    saved = plugin._persist("save_analysis", {"title": "Photosynthesis notes", "analysis": {"keyPoints": []}})
+    record_id = saved["data"]["analysis"]["id"]
+    assert plugin._persist("rename_analysis", {"id": record_id, "title": "Biology notes"})["success"]
+    matches = plugin._persist("search_analyses", {"query": "biology"})
+    assert matches["data"]["analyses"][0]["title"] == "Biology notes"
