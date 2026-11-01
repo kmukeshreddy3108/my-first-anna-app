@@ -42,7 +42,7 @@ function resumePendingAnalysis() {
   window.setTimeout(() => analyze(pending), 250);
 }
 function setRoute(route) { window.history.replaceState(null, "", `#${route}`); render(); }
-function cite(source) { return source?.snippet ? `<div class="citation">Source: ${escapeHtml(source.snippet)}</div>` : ""; }
+function cite(source) { return source?.snippet ? `<div class="citation">Source${source.file ? ` (${escapeHtml(source.file)})` : ""}: ${escapeHtml(source.snippet)}</div>` : ""; }
 function sourceBadge(source) { return `<span class="badge ${source === "rule-based" ? "basic" : ""}">${source === "rule-based" ? "Basic mode (rule-based)" : source === "cache" ? "Cached result" : "AI-generated"}</span>`; }
 function points(analysis) { return (analysis?.keyPoints || []).map(point => typeof point === "string" ? { text: point, source: {} } : point); }
 function renderItems(items, field = "text") {
@@ -83,8 +83,9 @@ async function addFiles(files, text, updateCount) {
   const usable = current.files.filter(item => item.status === "ok" && item.text);
   let offset = 0;
   current.sourceMap = usable.map(item => {
-    const entry = { file: item.name, section: item.detectedKind, start: offset, end: offset + item.text.length };
-    offset += item.text.length + item.name.length + 8;
+    const header = `--- ${item.name} ---\n`;
+    const entry = { file: item.name, section: item.detectedKind, start: offset, end: offset + header.length + item.text.length };
+    offset += header.length + item.text.length + 2;
     return entry;
   });
   text.value = usable.map(item => `--- ${item.name} ---\n${item.text}`).join("\n\n");
