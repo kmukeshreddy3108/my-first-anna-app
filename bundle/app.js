@@ -1,62 +1,35 @@
-import { AnnaAppRuntime } from "/static/anna-apps/_sdk/latest/index.js";
+import { createApi } from "./api.js";
+import { sampleFiles, sampleTexts } from "./samples.js";
 
 const TOOL_ID = window.__ANNA_TOOL_IDS__?.summarizer || "tool-dev-my-first-anna-app";
-const sampleFiles = [
-  ["science-photosynthesis", "Science · photosynthesis and carbon"],
-  ["history-industrial-revolution", "History · Industrial Revolution"],
-  ["technology-internet-dns", "Technology · internet and DNS"],
-  ["business-meeting", "Business · launch meeting"],
-  ["health-macronutrients", "Health · macronutrients"],
-  ["mixed-language", "Mixed language · study habits"],
-  ["short-edge", "Edge case · short"],
-  ["long-edge", "Edge case · long"],
-];
-let anna = null;
-let ready = false;
 let cancelled = false;
+let heartbeatTimer = null;
+let lastError = null;
 let current = { text: "", analysis: null, outputs: {}, critique: null, chat: [] };
 let savedHistory = [];
 const app = () => document.getElementById("app");
 const escapeHtml = value => String(value ?? "").replace(/[&<>"']/g, char => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[char]));
-const unwrap = response => response?.data || response?.result?.data || response || {};
-const friendlyError = error => {
-  console.error("StudyLens tool error", error);
-  return (error?.message || "Something went wrong. Please try again.").replace(/^\[-?\d+\]\s*/,"").replace(/^transport:\s*/i,"");
+const statusBadge = () => document.getElementById("connection-status");
+const setConnectionStatus = state => {
+  const badge = statusBadge();
+  if (!badge) return;
+  badge.textContent = state === "connected" ? "Connected" : "Reconnecting";
+  badge.className = `status-badge ${state}`;
 };
-async function invoke(method, args) {
-  if (!anna || !ready) throw new Error("Connecting to Anna. Please try again.");
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    try {
-      const data = unwrap(await anna.tools.invoke({ tool_id: TOOL_ID, method, args, timeoutMs: 55000 }));
-      if (data.success === false) throw new Error(typeof data.error === "string" ? data.error : "The request could not be completed.");
-      return data;
-    } catch (error) {
-      const detail = String(error?.message || error);
-      if (attempt === 0 && (detail.includes("unknown session_id") || detail.includes("-32602"))) {
-        ready = false;
-        const status = document.getElementById("progress-status") || document.getElementById("home-status");
-        if (status) status.textContent = "Session expired, reconnecting...";
-        try {
-          anna = await AnnaAppRuntime.connect();
-          await anna.window.ready();
-          ready = true;
-          continue;
-        } catch (reconnectError) {
-          console.error("Anna session reconnect failed", reconnectError);
-        }
-      }
-      if (detail.includes("unknown session_id") || detail.includes("-32602")) {
-        throw new Error("Your Anna session expired. Please reload the page and try again.");
-      }
-      throw error;
-    }
-  }
-  throw new Error("The request could not be completed.");
-}
+const friendlyError = error => {
+  console.error("StudyLens user-visible error", error);
+  return error?.message || "The request could not be completed.";
+};
+const api = createApi({
+  toolId: TOOL_ID,
+  onStatus: setConnectionStatus,
+  onError: error => { lastError = error; },
+});
+const invoke = (method, args, options) => api.invoke(method, args, options);
 async function saveRuntimeState() {
-  if (!anna?.storage?.set || !current.analysis) return;
+  if (!current.analysis) return;
   try {
-    await anna.storage.set({ key: "studylens:last-analysis", value: { text: current.text, analysis: current.analysis, outputs: current.outputs, critique: current.critique, chat: current.chat } });
+    await api.storageSet({ key: "studylens:last-analysis", value: { text: current.text, analysis: current.analysis, outputs: current.outputs, critique: current.critique, chat: current.chat } });
   } catch (error) {
     console.error("StudyLens runtime storage unavailable", error);
   }
@@ -71,7 +44,7 @@ function renderItems(items, field = "text") {
 }
 function renderHome() {
   app().innerHTML = `<section class="hero"><div class="card"><span class="eyebrow">AI study workspace</span><h2>Turn one document into a learning kit</h2><p>Paste lecture notes, an article, transcript, or report. StudyLens stays grounded in your source and shows citations instead of guessing.</p><div class="notice">Every generated block is labelled. Unsupported questions receive “Not found in your document.”</div></div><div class="card"><h3>How it works</h3><p>1. Analyze the source</p><p>2. Generate summaries and practice</p><p>3. Verify claims against passages</p><p>4. Save your study kit</p></div></section>
-  <section class="card"><h2>New analysis</h2><label for="source-text"><strong>Document text</strong></label><textarea id="source-text" placeholder="Paste at least 20 characters...">${escapeHtml(current.text)}</textarea><div class="input-meta muted"><span id="count">0 characters</span><span>Limit: 120,000 characters</span></div><div id="file-status" class="muted"></div><div id="dropzone" class="dropzone">Drop a TXT or MD file here, or <button id="file-btn" class="ghost" type="button">choose a file</button><input id="file-input" type="file" accept=".txt,.md,text/plain,text/markdown" hidden></div><div class="actions"><label>Try a sample <select id="sample-select"><option value="">Choose a document</option><option value="random">Surprise me</option>${sampleFiles.map(([id,label]) => `<option value="${id}">${label}</option>`).join("")}</select></label><button id="analyze-btn" type="button" ${ready ? "" : "disabled"}>Analyze document</button></div><p id="home-status" class="muted" aria-live="polite">${ready ? "Ready." : "Connecting to Anna..."}</p></section>`;
+  <section class="card"><h2>New analysis</h2><label for="source-text"><strong>Document text</strong></label><textarea id="source-text" placeholder="Paste at least 20 characters...">${escapeHtml(current.text)}</textarea><div class="input-meta muted"><span id="count">0 characters</span><span>Limit: 120,000 characters</span></div><div id="file-status" class="muted"></div><div id="dropzone" class="dropzone">Drop a TXT or MD file here, or <button id="file-btn" class="ghost" type="button">choose a file</button><input id="file-input" type="file" accept=".txt,.md,text/plain,text/markdown" hidden></div><div class="actions"><label>Try a sample <select id="sample-select"><option value="">Choose a document</option><option value="random">Surprise me</option>${sampleFiles.map(([id,label]) => `<option value="${id}">${label}</option>`).join("")}</select></label><button id="analyze-btn" type="button">Analyze document</button></div><p id="home-status" class="muted" aria-live="polite">${api.isConnected() ? "Ready." : "Connecting to Anna..."}</p></section>`;
   const text = document.getElementById("source-text");
   const count = document.getElementById("count");
   const updateCount = () => { count.textContent = `${text.value.length.toLocaleString()} characters`; };
@@ -80,8 +53,7 @@ function renderHome() {
     const selected = event.target.value;
     if (!selected) return;
     const id = selected === "random" ? sampleFiles[Math.floor(Math.random() * sampleFiles.length)][0] : selected;
-    try { text.value = await (await fetch(`samples/${id}.md`)).text(); updateCount(); }
-    catch (error) { document.getElementById("file-status").textContent = "Sample could not be loaded. Paste your own text or use file upload."; document.getElementById("file-status").className = "error"; console.error("Sample load failed", error); }
+    text.value = sampleTexts[id] || ""; updateCount();
   };
   document.getElementById("file-btn").onclick = () => document.getElementById("file-input").click();
   document.getElementById("file-input").onchange = event => loadFile(event.target.files[0], text, updateCount);
@@ -98,7 +70,7 @@ async function loadFile(file, text, updateCount) {
   try { text.value = await file.text(); updateCount(); status.textContent = `${file.name} loaded (${file.size.toLocaleString()} bytes). Review the extracted text before analyzing.`; status.className = "muted"; }
   catch (error) { status.textContent = friendlyError(error); status.className = "error"; }
 }
-function pipeline() { return `<section class="card"><h2>Analysis pipeline</h2><div class="progress"><div id="step-analyze" class="step">1. Analyze</div><div id="step-generate" class="step">2. Generate</div><div id="step-verify" class="step">3. Verify</div><div id="step-save" class="step">4. Save</div></div><button id="cancel-btn" class="secondary" type="button">Cancel</button><p id="progress-status" class="muted">Starting...</p></section>`; }
+function pipeline() { return `<section class="card"><h2>Analysis pipeline</h2><div class="progress"><div id="step-analyze" class="step">1. Analyze</div><div id="step-generate" class="step">2. Generate</div><div id="step-verify" class="step">3. Verify</div><div id="step-save" class="step">4. Save</div></div><button id="cancel-btn" class="secondary" type="button">Cancel</button><button id="retry-btn" class="secondary" type="button" hidden>Retry failed step</button><p id="progress-status" class="muted">Starting...</p></section>`; }
 function setStep(id, state) { const element = document.getElementById(id); if (element) element.className = `step ${state}`; }
 async function analyze(rawText) {
   const text = rawText.trim();
@@ -133,7 +105,7 @@ async function analyze(rawText) {
     setStep(active, "done"); active = "step-save"; setStep(active, "active"); document.getElementById("progress-status").textContent = "Saving your study kit...";
     await invoke("save_analysis", { title: (current.analysis.title || text.slice(0, 60)), analysis: current }); await saveRuntimeState();
     setStep(active, "done"); setRoute("/results"); await loadHistory();
-  } catch (error) { setStep(active, "failed"); const progressStatus = document.getElementById("progress-status"); if (progressStatus) { progressStatus.textContent = friendlyError(error); progressStatus.className = "error"; } }
+  } catch (error) { setStep(active, "failed"); const progressStatus = document.getElementById("progress-status"); if (progressStatus) { progressStatus.textContent = friendlyError(error); progressStatus.className = "error"; } const retry = document.getElementById("retry-btn"); if (retry) { retry.hidden = false; retry.onclick = () => analyze(current.text); } }
 }
 function renderResults() {
   if (!current.analysis) return setRoute("/");
@@ -163,9 +135,12 @@ function renderHistory() { app().innerHTML = `<section class="card"><span class=
 async function renameHistory(id, oldTitle) { const title = window.prompt("New analysis title", oldTitle); if (!title || title.trim() === oldTitle) return; try { await invoke("rename_analysis", { id, title: title.trim() }); await loadHistory(); renderHistory(); } catch (error) { window.alert(friendlyError(error)); } }
 async function deleteHistory(id) { if (!window.confirm("Delete this saved analysis? This cannot be undone.")) return; try { await invoke("delete_analysis", { id }); await loadHistory(); renderHistory(); } catch (error) { window.alert(friendlyError(error)); } }
 async function openHistory(id) { try { const result = await invoke("get_analysis", { id }); current = result.analysis?.analysis || result.analysis || current; setRoute("/results"); } catch (error) { alert(friendlyError(error)); } }
-function renderSettings() { app().innerHTML = `<section class="card"><span class="eyebrow">Preferences</span><h2>Settings</h2><div class="settings-row"><span>Default summary style</span><select><option>Short</option><option>Detailed</option><option>Exam notes</option></select></div><div class="settings-row"><span>Text size</span><select><option>Comfortable</option><option>Large</option></select></div><div class="settings-row"><span>Data</span><span class="muted">Analyses are saved by the Executa history service.</span></div><div class="notice" style="margin-top:18px">StudyLens uses only your supplied document for grounded study outputs. AI-generated content is labelled.</div></section>`; }
+function renderSettings() { app().innerHTML = `<section class="card"><span class="eyebrow">Preferences</span><h2>Settings</h2><div class="settings-row"><span>Default summary style</span><select><option>Short</option><option>Detailed</option><option>Exam notes</option></select></div><div class="settings-row"><span>Text size</span><select><option>Comfortable</option><option>Large</option></select></div><div class="settings-row"><span>Data</span><span class="muted">Analyses are saved by the Executa history service.</span></div><h3>Diagnostics</h3><div class="settings-row"><span>Bridge</span><span>${api.isConnected() ? "Connected" : "Reconnecting"}</span></div><div class="settings-row"><span>Last error</span><span class="muted">${escapeHtml(lastError?.message || "None")}</span></div><button id="self-check" type="button">Run self-check</button><div id="self-check-result" class="muted"></div><div class="notice" style="margin-top:18px">StudyLens uses only your supplied document for grounded study outputs. AI-generated content is labelled.</div></section>`; document.getElementById("self-check").onclick = async () => { const result = await api.health(); document.getElementById("self-check-result").textContent = result.connected ? "Runtime and plugin are ready." : friendlyError(result.error); }; }
 async function render() { const route = location.hash.slice(1) || "/"; document.querySelectorAll("[data-route]").forEach(button => button.classList.toggle("active", button.dataset.route === route)); if (route === "/results") renderResults(); else if (route === "/history") { await loadHistory(); renderHistory(); } else if (route === "/settings") renderSettings(); else renderHome(); }
 document.addEventListener("click", event => { const button = event.target.closest("[data-route]"); if (button) { event.preventDefault(); setRoute(button.dataset.route); } });
 window.addEventListener("hashchange", render);
-try { anna = await AnnaAppRuntime.connect(); await anna.window.set_title({ title: "StudyLens AI" }); await anna.window.ready(); ready = true; } catch (error) { console.error("Anna connection unavailable", error); }
+try { await api.connect(); await api.setTitle("StudyLens AI"); } catch (error) { lastError = error; console.error("Anna connection unavailable", error); }
 render();
+const heartbeat = async () => { const result = await api.health(); if (!result.connected) setConnectionStatus("reconnecting"); };
+heartbeat();
+heartbeatTimer = window.setInterval(heartbeat, 30000);

@@ -41,6 +41,7 @@ MANIFEST: dict[str, Any] = {
     "host_capabilities": ["llm.sample"],
     "tools": [
         {"name": "analyze_document", "description": "Classify and structurally analyze a document.", "parameters": {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]}},
+        {"name": "health", "description": "Report plugin readiness and model availability.", "parameters": {"type": "object", "properties": {}, "additionalProperties": False}},
         {"name": "generate_summary", "description": "Generate a grounded summary in a selected study mode.", "parameters": {"type": "object", "properties": {"analysis": {"type": "object"}, "mode": {"type": "string"}}, "required": ["analysis", "mode"]}},
         {"name": "generate_action_items", "description": "Generate grounded study tasks and a study plan.", "parameters": {"type": "object", "properties": {"analysis": {"type": "object"}}, "required": ["analysis"]}},
         {"name": "generate_flashcards", "description": "Generate grounded flashcards.", "parameters": {"type": "object", "properties": {"analysis": {"type": "object"}, "count": {"type": "integer"}, "difficulty": {"type": "string"}}, "required": ["analysis"]}},
@@ -485,6 +486,8 @@ def _persist(method: str, args: dict[str, Any]) -> dict[str, Any]:
 
 
 def _invoke(method: str, args: dict[str, Any]) -> dict[str, Any]:
+    if method == "health":
+        return {"success": True, "data": {"status": "ready", "modelAvailable": _sampling_enabled}}
     if method == "analyze_document":
         return _analyze(args)
     if method == "generate_outputs":
