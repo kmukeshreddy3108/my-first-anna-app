@@ -2,7 +2,7 @@
   "display_name": "tool-dev-my-first-anna-app",
   "version": "0.3.0",
   "description": "AI Study & Document Analyst with structured analysis, verified outputs, grounded Q&A, and history.",
-  "host_capabilities": ["llm.sample", "llm.complete"],
+  "host_capabilities": ["llm.sample"],
   "tools": [
     {"name": "analyze_document", "description": "Classify and structurally analyze a document.", "parameters": {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]}},
     {"name": "generate_outputs", "description": "Generate a summary, action list, flashcards, or quiz from analysis.", "parameters": {"type": "object", "properties": {"analysis": {"type": "object"}, "mode": {"type": "string"}}, "required": ["analysis", "mode"]}},

@@ -5,8 +5,13 @@ Sampling is optional: when unavailable, tools return explicit structured
 errors rather than pretending that a result was AI-generated.
 """
 
-from __future__ import annotations
+import sys
 
+for _stream in (sys.stdin, sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+
+import concurrent.futures
 import json
 import os
 import queue
@@ -29,7 +34,7 @@ MANIFEST: dict[str, Any] = {
     "display_name": "tool-dev-my-first-anna-app",
     "version": "0.3.0",
     "description": "AI Study & Document Analyst with structured analysis, verified outputs, and grounded follow-up questions.",
-    "host_capabilities": ["llm.sample", "llm.complete"],
+    "host_capabilities": ["llm.sample"],
     "tools": [
         {"name": "analyze_document", "description": "Classify and structurally analyze a document.", "parameters": {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]}},
         {"name": "generate_outputs", "description": "Generate a summary, action list, flashcards, or quiz from analysis.", "parameters": {"type": "object", "properties": {"analysis": {"type": "object"}, "mode": {"type": "string"}}, "required": ["analysis", "mode"]}},
@@ -46,10 +51,7 @@ _responses: dict[str, queue.Queue[dict[str, Any]]] = {}
 _requests: queue.Queue[dict[str, Any]] = queue.Queue()
 _sampling_enabled = True
 _store_lock = threading.Lock()
-
-for _stream in (sys.stdin, sys.stdout, sys.stderr):
-    if hasattr(_stream, "reconfigure"):
-        _stream.reconfigure(encoding="utf-8", errors="replace")
+TOOL_TIMEOUT = 120
 
 
 def _write(value: dict[str, Any]) -> None:
@@ -323,13 +325,35 @@ def _dispatch(envelope: dict[str, Any]) -> None:
             params = envelope.get("params", {})
             if not isinstance(params, dict) or not isinstance(params.get("arguments", {}), dict):
                 raise ValueError("invoke params and arguments must be objects")
-            result = _invoke(str(params.get("tool", "")), params["arguments"])
+            executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+            future = executor.submit(_invoke, str(params.get("tool", "")), params["arguments"])
+            try:
+                result = future.result(timeout=TOOL_TIMEOUT)
+            except concurrent.futures.TimeoutError:
+                future.cancel()
+                result = {
+                    "success": False,
+                    "error": {
+                        "code": "tool_timeout",
+                        "message": f"Tool call exceeded the {TOOL_TIMEOUT}-second timeout.",
+                    },
+                }
+            finally:
+                executor.shutdown(wait=False, cancel_futures=True)
         else:
             raise ValueError(f"Unknown RPC method: {method}")
         _write({"jsonrpc": "2.0", "id": request_id, "result": result})
     except Exception as error:
         _log(f"request failed: {error}")
-        _write({"jsonrpc": "2.0", "id": request_id, "error": {"code": -32603, "message": str(error)}})
+        _write({
+            "jsonrpc": "2.0",
+            "id": request_id,
+            "error": {
+                "code": -32603,
+                "message": "Request failed.",
+                "data": {"type": type(error).__name__, "detail": str(error)},
+            },
+        })
 
 
 def main() -> None:

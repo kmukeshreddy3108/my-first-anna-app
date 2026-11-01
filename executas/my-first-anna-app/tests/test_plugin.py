@@ -70,6 +70,14 @@ def test_unicode_text_is_normalized_and_protocol_safe(monkeypatch):
     assert "\x00" not in plugin._validate_text(text + "\x00")
 
 
+def test_unicode_torture_document_under_cp1252_mode(monkeypatch):
+    monkeypatch.setattr(plugin, "_sampling_enabled", False)
+    text = ('CO₂ H₂O x² “smart quotes” em—dash é ñ ü తెలుగు हिंदी 😀 ≈ ≤ ∑ π. ' * 300)
+    result = plugin._analyze({"text": text})
+    assert result["success"] is True
+    assert result["data"]["analysis"]["sourceLength"] == len(plugin._validate_text(text))
+
+
 def test_protocol_frames_are_ascii(monkeypatch, capsys):
     plugin._write({"result": {"text": "é 😀"}})
     assert capsys.readouterr().out == '{"result": {"text": "\\u00e9 \\ud83d\\ude00"}}\n'
