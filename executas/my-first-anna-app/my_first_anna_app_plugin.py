@@ -395,10 +395,14 @@ def _generate_quiz(args: dict[str, Any]) -> dict[str, Any]:
     analysis = args.get("analysis")
     count = max(1, min(int(args.get("count", 5)), 30))
     points = _fallback_items(analysis if isinstance(analysis, dict) else {})
+    weak_concepts = {str(item).strip().lower() for item in args.get("weak_concepts", []) if str(item).strip()}
+    if weak_concepts:
+        points = sorted(points, key=lambda point: 0 if any(term in point["text"].lower() for term in weak_concepts) else 1)
     questions = [{"id": str(index + 1), "type": "short-answer", "question": f"State this key point: {point['text']}", "correctAnswer": point["text"], "explanation": "This answer is supported by the cited source.", "options": [], "source": point["source"], "concept": point["text"][:40]} for index, point in enumerate(points[:count])]
     concepts = [point["text"][:40] for point in points]
     fallback = {"questions": questions, "coverage": {"covered": len(questions), "total": len(concepts), "label": f"Covers {len(questions)} of {len(concepts)} key concepts"}, "aiGenerated": False}
-    output, source, error = _sample_json(f"Create a grounded quiz with {count} questions. Include type, question, options, correctAnswer, explanation, source, and concept. Cover all key concepts.\n{json.dumps(analysis, ensure_ascii=False)}", fallback)
+    focus = f"Prioritize these weak concepts for remediation: {sorted(weak_concepts)}." if weak_concepts else "Cover all key concepts."
+    output, source, error = _sample_json(f"Create a grounded quiz with {count} questions. Include type, question, options, correctAnswer, explanation, source, and concept. {focus}\n{json.dumps(analysis, ensure_ascii=False)}", fallback)
     output["mode"] = "quiz"
     output["aiGenerated"] = source == "AI-generated"
     return {"success": True, "data": {"output": output, "source": source, "warning": error}}
@@ -464,7 +468,15 @@ def _grade_quiz(args: dict[str, Any]) -> dict[str, Any]:
         results.append({"id": question_id, "correct": is_correct, "expected": question.get("correctAnswer", ""), "answer": actual, "concept": question.get("concept", ""), "source": question.get("source", {})})
     total = len(results)
     weak = list(dict.fromkeys(item["concept"] for item in results if not item["correct"] and item["concept"]))
-    return {"success": True, "data": {"score": correct, "total": total, "percentage": round(correct * 100 / total) if total else 0, "results": results, "weakAreas": weak, "reviewSections": [item["source"] for item in results if not item["correct"]]}}
+    concept_stats = {}
+    for item in results:
+        concept = item["concept"] or "Uncategorized"
+        stats = concept_stats.setdefault(concept, {"correct": 0, "total": 0})
+        stats["total"] += 1
+        stats["correct"] += int(item["correct"])
+    for stats in concept_stats.values():
+        stats["mastery"] = round(stats["correct"] * 100 / stats["total"]) if stats["total"] else 0
+    return {"success": True, "data": {"score": correct, "total": total, "percentage": round(correct * 100 / total) if total else 0, "results": results, "weakAreas": weak, "conceptStats": concept_stats, "reviewSections": [item["source"] for item in results if not item["correct"]]}}
 
 
 def _export_text(analysis: dict[str, Any], markdown: bool) -> str:

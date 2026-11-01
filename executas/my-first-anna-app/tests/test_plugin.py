@@ -107,8 +107,20 @@ def test_grounded_outputs_quiz_grading_export_and_cache(monkeypatch):
     quiz = plugin._generate_quiz({"analysis": analysis, "count": 2})["data"]["output"]
     graded = plugin._grade_quiz({"quiz": quiz, "answers": {"1": quiz["questions"][0]["correctAnswer"]}})
     assert graded["data"]["score"] == 1
+    assert graded["data"]["conceptStats"]
+    assert all("mastery" in stats for stats in graded["data"]["conceptStats"].values())
     exported = plugin._export_analysis({"analysis": analysis, "format": "markdown"})
     assert exported["data"]["content"].startswith("# ")
+
+
+def test_quiz_retry_prioritizes_weak_concepts(monkeypatch):
+    monkeypatch.setattr(plugin, "_sampling_enabled", False)
+    analysis = {"keyPoints": [
+        {"text": "Photosynthesis uses light.", "source": {"chunkId": "chunk-1"}},
+        {"text": "Respiration releases energy.", "source": {"chunkId": "chunk-1"}},
+    ]}
+    quiz = plugin._generate_quiz({"analysis": analysis, "count": 1, "weak_concepts": ["Respiration"]})
+    assert "Respiration" in quiz["data"]["output"]["questions"][0]["question"]
 
 
 def test_source_map_is_preserved_in_citations(monkeypatch):
