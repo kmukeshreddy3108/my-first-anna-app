@@ -93,6 +93,9 @@ function csvOutline(text, separator) {
 }
 
 function htmlText(text) {
+  if (typeof DOMParser === "undefined") {
+    return text.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/gi, "").replace(/<[^>]+>/g, " ");
+  }
   const doc = new DOMParser().parseFromString(text, "text/html");
   doc.querySelectorAll("script,style,noscript,template").forEach(node => node.remove());
   return doc.body?.innerText || doc.documentElement?.textContent || "";
@@ -104,6 +107,7 @@ function structuredText(text, kind) {
     catch { return text; }
   }
   if (kind === "xml") {
+    if (typeof DOMParser === "undefined" || typeof XMLSerializer === "undefined") return text;
     try { return new XMLSerializer().serializeToString(new DOMParser().parseFromString(text, "application/xml")); }
     catch { return text; }
   }

@@ -1,8 +1,9 @@
 {
   "private": true,
+  "type": "module",
   "scripts": {
     "test": "executas\\my-first-anna-app\\.venv\\Scripts\\python.exe -m pytest -q executas\\my-first-anna-app\\tests",
-    "selftest": "executas\\my-first-anna-app\\.venv\\Scripts\\python.exe scripts\\selftest.py",
+    "selftest": "executas\\my-first-anna-app\\.venv\\Scripts\\python.exe scripts\\selftest.py && node scripts\\ingest_selftest.mjs",
     "validate": "anna-app validate --manifest manifest.json --bundle bundle"
   }
 }

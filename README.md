@@ -23,6 +23,29 @@ Analyze, then explore Summary, Concepts, Actions, Study, Quiz, Ask, and
 Verification. Saved kits appear in History and can be searched, renamed,
 reopened, deleted, or exported as Markdown or plain text.
 
+The ingestion layer accepts multiple local files by picker, drag and drop, or
+clipboard paste. Text, source code, CSV/TSV, JSON, XML, and HTML are processed
+offline in the browser and retain file names in grounded citations. PDF,
+Office, image/OCR, EPUB, archive extraction, and audio/video transcription are
+reported as unsupported in the current zero-dependency Anna sandbox rather than
+failing silently. Extracted text is sent to the model only after you click
+Analyze.
+
+### File support and limits
+
+| Format | Status | Notes |
+|---|---|---|
+| TXT, MD, LOG, SRT, VTT, source code | Full | UTF-8/UTF-16 and Windows-1252 fallback |
+| CSV, TSV, JSON, XML, HTML | Full/partial | CSV tables are rendered and large tables are sampled |
+| PDF, DOCX, PPTX, XLSX/XLS, RTF, ODT, EPUB | Unsupported here | Parser libraries are not installed in the Anna sandbox |
+| PNG, JPG, WEBP, scanned PDF | Unsupported here | Offline OCR is not installed |
+| ZIP | Unsupported in browser | Safe plugin-side binary transfer is not exposed by the current bridge |
+| MP3, WAV, M4A, MP4 | Unsupported | No free offline transcription path is installed |
+
+The current limits are 20 MB per file, 40 MB total per batch, and 120,000
+characters of extracted text. Files are read locally; only extracted text and
+source metadata are sent during analysis.
+
 ## Run locally
 
 Prerequisites: Node.js, `uv`, Python 3.10+, and the Anna CLI.
