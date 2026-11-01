@@ -48,7 +48,11 @@ function resumePendingAnalysis() {
   window.setTimeout(() => analyze(pending), 250);
 }
 function setRoute(route) { window.history.replaceState(null, "", `#${route}`); render(); }
-function cite(source) { return source?.snippet ? `<div class="citation">Source${source.file ? ` (${escapeHtml(source.file)})` : ""}: ${escapeHtml(source.snippet)}</div>` : ""; }
+function cite(source) {
+  if (!source?.snippet) return "";
+  const location = [source.file, source.page ? `page ${source.page}` : "", source.slide ? `slide ${source.slide}` : "", source.sheet ? `sheet ${source.sheet}` : "", source.paragraph ? `paragraph ${source.paragraph}` : ""].filter(Boolean).join(" · ");
+  return `<details class="citation"><summary>Reference${location ? `: ${escapeHtml(location)}` : ""}</summary><div>${escapeHtml(source.snippet)}</div></details>`;
+}
 function sourceBadge(source) { return `<span class="badge ${source === "rule-based" ? "basic" : ""}">${source === "rule-based" ? "Basic mode (rule-based)" : source === "cache" ? "Cached result" : "AI-generated"}</span>`; }
 function points(analysis) { return (analysis?.keyPoints || []).map(point => typeof point === "string" ? { text: point, source: {} } : point); }
 function renderItems(items, field = "text") {

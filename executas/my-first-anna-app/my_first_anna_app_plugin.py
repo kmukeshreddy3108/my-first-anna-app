@@ -250,8 +250,14 @@ def _source_ref(
 ) -> dict[str, Any]:
     chunks = chunks or _chunks(text)
     location = next((i for i, chunk in enumerate(chunks) if statement[:40].lower() in chunk.lower()), index % max(1, len(chunks)))
-    reference = {"chunkId": f"chunk-{location + 1}", "snippet": chunks[location][:240]}
     position = text.lower().find(statement[:40].lower())
+    if position >= 0:
+        start = max(0, position)
+        end = min(len(text), position + min(240, max(len(statement), 1)))
+        snippet = text[start:end].strip()
+    else:
+        snippet = chunks[location][:240]
+    reference = {"chunkId": f"chunk-{location + 1}", "snippet": snippet}
     if source_map:
         match = next((item for item in source_map if item.get("start", 0) <= max(0, position) < item.get("end", 0)), None)
         if match:
@@ -349,6 +355,25 @@ def _fallback_items(analysis: dict[str, Any]) -> list[dict[str, Any]]:
     return [{"text": _point_text(point), "source": point.get("source", {}) if isinstance(point, dict) else {}} for point in analysis.get("keyPoints", []) if _point_text(point)]
 
 
+def _ground_output(output: dict[str, Any], analysis: dict[str, Any]) -> dict[str, Any]:
+    references = [item.get("source", {}) for item in _fallback_items(analysis)]
+    points = [_point_text(item) for item in analysis.get("keyPoints", [])]
+    def reference_for(value: Any, index: int) -> dict[str, Any]:
+        text = str(value or "").lower()
+        match = next((i for i, point in enumerate(points) if point and (point.lower() in text or text in point.lower())), index % max(1, len(references)))
+        return references[match] if references else {}
+    for key in ("items", "cards", "questions", "studyPlan"):
+        values = output.get(key)
+        if not isinstance(values, list):
+            continue
+        for index, item in enumerate(values):
+            if not isinstance(item, dict):
+                continue
+            existing = item.get("source") if isinstance(item.get("source"), dict) else {}
+            item["source"] = {**existing, **reference_for(item.get("text") or item.get("answer") or item.get("question") or item.get("task") or item.get("topic"), index)}
+    return output
+
+
 def _generate_summary(args: dict[str, Any]) -> dict[str, Any]:
     analysis = args.get("analysis")
     mode = args.get("mode")
@@ -359,6 +384,7 @@ def _generate_summary(args: dict[str, Any]) -> dict[str, Any]:
     fallback = {"mode": mode, "summary": " ".join(item["text"] for item in items[:limit]), "items": items[:limit], "aiGenerated": False}
     prompt = f"Generate a {mode} study summary. Return JSON with mode, summary, and items; every item must include text and source. Keep facts grounded in the analysis.\n\n{json.dumps(analysis, ensure_ascii=False)}"
     output, source, error = _sample_json(prompt, fallback)
+    output = _ground_output(output, analysis)
     output["mode"] = mode
     output["aiGenerated"] = source == "AI-generated"
     return {"success": True, "data": {"output": output, "source": source, "warning": error}}
@@ -375,6 +401,7 @@ def _generate_action_items(args: dict[str, Any]) -> dict[str, Any]:
         "aiGenerated": False,
     }
     output, source, error = _sample_json(f"Create prioritized study tasks and a study plan from this analysis. Return JSON with items and studyPlan; cite every item.\n{json.dumps(analysis, ensure_ascii=False)}", fallback)
+    output = _ground_output(output, analysis)
     output["mode"] = "actions"
     output["aiGenerated"] = source == "AI-generated"
     return {"success": True, "data": {"output": output, "source": source, "warning": error}}
@@ -386,6 +413,7 @@ def _generate_flashcards(args: dict[str, Any]) -> dict[str, Any]:
     points = _fallback_items(analysis if isinstance(analysis, dict) else {})
     fallback = {"cards": [{"question": f"What is an important point about {point['text'][:60]}?", "answer": point["text"], "source": point["source"], "concept": point["text"][:40]} for point in points[:count]], "aiGenerated": False}
     output, source, error = _sample_json(f"Create {count} grounded flashcards from this analysis. Every card needs question, answer, concept, and source.\n{json.dumps(analysis, ensure_ascii=False)}", fallback)
+    output = _ground_output(output, analysis)
     output["mode"] = "flashcards"
     output["aiGenerated"] = source == "AI-generated"
     return {"success": True, "data": {"output": output, "source": source, "warning": error}}
@@ -403,6 +431,7 @@ def _generate_quiz(args: dict[str, Any]) -> dict[str, Any]:
     fallback = {"questions": questions, "coverage": {"covered": len(questions), "total": len(concepts), "label": f"Covers {len(questions)} of {len(concepts)} key concepts"}, "aiGenerated": False}
     focus = f"Prioritize these weak concepts for remediation: {sorted(weak_concepts)}." if weak_concepts else "Cover all key concepts."
     output, source, error = _sample_json(f"Create a grounded quiz with {count} questions. Include type, question, options, correctAnswer, explanation, source, and concept. {focus}\n{json.dumps(analysis, ensure_ascii=False)}", fallback)
+    output = _ground_output(output, analysis)
     output["mode"] = "quiz"
     output["aiGenerated"] = source == "AI-generated"
     return {"success": True, "data": {"output": output, "source": source, "warning": error}}

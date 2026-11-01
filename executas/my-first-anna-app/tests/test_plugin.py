@@ -123,6 +123,17 @@ def test_quiz_retry_prioritizes_weak_concepts(monkeypatch):
     assert "Respiration" in quiz["data"]["output"]["questions"][0]["question"]
 
 
+def test_generated_references_use_specific_source_passage(monkeypatch):
+    monkeypatch.setattr(plugin, "_sampling_enabled", False)
+    analysis = {"keyPoints": [
+        {"text": "Photosynthesis uses light energy.", "source": {"chunkId": "chunk-1", "snippet": "Photosynthesis uses light energy."}},
+        {"text": "Respiration releases energy from food.", "source": {"chunkId": "chunk-1", "snippet": "Respiration releases energy from food."}},
+    ]}
+    output = plugin._generate_summary({"analysis": analysis, "mode": "short"})["data"]["output"]
+    assert output["items"][0]["source"]["snippet"] == "Photosynthesis uses light energy."
+    assert output["items"][1]["source"]["snippet"] == "Respiration releases energy from food."
+
+
 def test_source_map_is_preserved_in_citations(monkeypatch):
     monkeypatch.setattr(plugin, "_sampling_enabled", False)
     text = "--- one.txt ---\nAlpha facts are verified.\n\n--- two.txt ---\nBeta facts are verified."
