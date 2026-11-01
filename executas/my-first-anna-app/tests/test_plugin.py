@@ -55,6 +55,34 @@ def test_all_output_modes_are_supported(monkeypatch):
     assert short["data"]["output"]["summary"] == "One verified point."
 
 
+def test_summary_modes_have_distinct_grounded_shapes(monkeypatch):
+    monkeypatch.setattr(plugin, "_sampling_enabled", False)
+    analysis = {"title": "Solar study", "documentType": "article", "keyPoints": [
+        {"text": "Plants use light energy.", "source": {"snippet": "Plants use light energy."}},
+        {"text": "Water enters through roots.", "source": {"snippet": "Water enters through roots."}},
+    ]}
+    outputs = {mode: plugin._generate_summary({"analysis": analysis, "mode": mode})["data"]["output"]
+               for mode in ("short", "detailed", "bullets", "simple", "exam_notes")}
+    assert outputs["short"]["keyTakeaway"]
+    assert outputs["detailed"]["sections"]
+    assert outputs["bullets"]["groups"]
+    assert outputs["simple"]["items"][0]["analogy"]
+    assert "facts" in outputs["exam_notes"] and "questions" in outputs["exam_notes"]
+    assert len({json.dumps(value, sort_keys=True) for value in outputs.values()}) == 5
+
+
+def test_summary_cache_is_keyed_by_mode_and_options(monkeypatch):
+    monkeypatch.setattr(plugin, "_sampling_enabled", False)
+    plugin._summary_cache.clear()
+    analysis = {"keyPoints": [{"text": "A verified fact.", "source": {"snippet": "A verified fact."}}]}
+    first = plugin._generate_summary({"analysis": analysis, "mode": "short", "length": "Brief"})
+    second = plugin._generate_summary({"analysis": analysis, "mode": "short", "length": "Brief"})
+    third = plugin._generate_summary({"analysis": analysis, "mode": "detailed", "length": "Brief"})
+    assert first["data"]["source"] == "rule-based"
+    assert second["data"]["source"] == "cache"
+    assert third["data"]["source"] == "rule-based"
+
+
 def test_long_text_is_chunked():
     chunks = plugin._chunks("paragraph " * 4000)
     assert len(chunks) > 1
