@@ -82,7 +82,9 @@ async function analyze(rawText) {
   app().innerHTML = pipeline();
   document.getElementById("cancel-btn").onclick = () => { cancelled = true; document.getElementById("progress-status").textContent = "Cancellation requested..."; };
   let active = "step-analyze";
-  try {
+  let retryFailed = null;
+  let failedStep = null;
+  const runAnalyze = async () => {
     setStep(active, "active");
     let cursor = 0;
     let combined = null;
@@ -97,15 +99,47 @@ async function analyze(rawText) {
     } while (cursor && !cancelled);
     current.analysis = combined;
     if (cancelled) throw new Error("Analysis cancelled.");
-    setStep(active, "done"); active = "step-generate"; setStep(active, "active"); document.getElementById("progress-status").textContent = "Generating a grounded summary...";
-    const summary = await invoke("generate_summary", { analysis: current.analysis, mode: "short" }); current.outputs.short = summary.output;
+    setStep(active, "done");
+  };
+  const runGenerate = async () => {
+    active = "step-generate"; setStep(active, "active");
+    document.getElementById("progress-status").textContent = "Generating a grounded summary...";
+    const summary = await invoke("generate_summary", { analysis: current.analysis, mode: "short" });
+    current.outputs.short = summary.output;
     if (cancelled) throw new Error("Analysis cancelled.");
-    setStep(active, "done"); active = "step-verify"; setStep(active, "active"); document.getElementById("progress-status").textContent = "Checking the draft against the source...";
-    current.critique = (await invoke("verify_and_refine", { source_text: text, draft: summary.output })).critique;
-    setStep(active, "done"); active = "step-save"; setStep(active, "active"); document.getElementById("progress-status").textContent = "Saving your study kit...";
-    await invoke("save_analysis", { title: (current.analysis.title || text.slice(0, 60)), analysis: current }); await saveRuntimeState();
-    setStep(active, "done"); setRoute("/results"); await loadHistory();
-  } catch (error) { setStep(active, "failed"); const progressStatus = document.getElementById("progress-status"); if (progressStatus) { progressStatus.textContent = friendlyError(error); progressStatus.className = "error"; } const retry = document.getElementById("retry-btn"); if (retry) { retry.hidden = false; retry.onclick = () => analyze(current.text); } }
+    setStep(active, "done");
+  };
+  const runVerify = async () => {
+    active = "step-verify"; setStep(active, "active");
+    document.getElementById("progress-status").textContent = "Checking the draft against the source...";
+    current.critique = (await invoke("verify_and_refine", { source_text: text, draft: current.outputs.short })).critique;
+    setStep(active, "done");
+  };
+  const runSave = async () => {
+    active = "step-save"; setStep(active, "active");
+    document.getElementById("progress-status").textContent = "Saving your study kit...";
+    await invoke("save_analysis", { title: (current.analysis.title || text.slice(0, 60)), analysis: current });
+    await saveRuntimeState();
+    setStep(active, "done");
+  };
+  try {
+    retryFailed = async () => {
+      if (failedStep === "step-analyze") await runAnalyze();
+      if (failedStep === "step-analyze" || failedStep === "step-generate") await runGenerate();
+      if (failedStep !== "step-save") await runVerify();
+      await runSave();
+      setRoute("/results"); await loadHistory();
+    };
+    await runAnalyze(); await runGenerate(); await runVerify(); await runSave();
+    setRoute("/results"); await loadHistory();
+  } catch (error) {
+    failedStep = active;
+    setStep(active, "failed");
+    const progressStatus = document.getElementById("progress-status");
+    if (progressStatus) { progressStatus.textContent = friendlyError(error); progressStatus.className = "error"; }
+    const retry = document.getElementById("retry-btn");
+    if (retry) { retry.hidden = false; retry.onclick = async () => { retry.hidden = true; try { await retryFailed(); } catch (retryError) { setStep(active, "failed"); progressStatus.textContent = friendlyError(retryError); progressStatus.className = "error"; retry.hidden = false; } }; }
+  }
 }
 function renderResults() {
   if (!current.analysis) return setRoute("/");
