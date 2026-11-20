@@ -44,6 +44,30 @@ def fake_response(prompt: str) -> str:
         return json.dumps({"items": [{"task": "Review the verified study point.", "priority": "High", "source": source}], "studyPlan": [{"topic": "source", "estimatedMinutes": 15, "source": source}], "aiGenerated": True})
     if "verify" in prompt.lower() or "critique" in prompt.lower():
         return json.dumps({"grounded": True, "confidence": "high", "revised": json.loads(prompt.split("\n", 1)[-1]) if False else {"text": point}, "changes": [], "unsupported": []})
+    if "detailed" in prompt.lower() and "summary" in prompt.lower():
+        return json.dumps({
+            "mode": "detailed", "summary": point, "overview": point,
+            "sections": [{"heading": "Key points", "paragraphs": [point], "whyItMatters": point, "keyTerms": [], "numbers": [], "source": source}],
+            "items": [{"text": point, "source": source}], "aiGenerated": True
+        })
+    if "bullets" in prompt.lower() and "summary" in prompt.lower():
+        return json.dumps({
+            "mode": "bullets", "summary": point,
+            "groups": [{"heading": "Key points", "bullets": [{"text": point, "source": source}]}],
+            "items": [{"text": point, "source": source}], "aiGenerated": True
+        })
+    if "simple" in prompt.lower() and "summary" in prompt.lower():
+        return json.dumps({
+            "mode": "simple", "summary": point, "intro": point,
+            "items": [{"text": point, "explanation": point, "analogy": point, "source": source}],
+            "aiGenerated": True
+        })
+    if "exam_notes" in prompt.lower() and "summary" in prompt.lower():
+        return json.dumps({
+            "mode": "exam_notes", "summary": point, "definitions": [], "facts": [{"text": point, "source": source}],
+            "processes": [], "comparisons": [], "mistakes": [], "questions": [{"text": point, "source": source}],
+            "items": [{"text": point, "source": source}], "aiGenerated": True
+        })
     return json.dumps({"mode": "short", "summary": point, "items": [{"text": point, "source": source}], "aiGenerated": True})
 
 
@@ -139,8 +163,17 @@ def check_sample(host: FakeHost, path: Path) -> list[tuple[str, str, float]]:
         page = checked("analyze_document(cursor)", lambda: call(host, "analyze_document", {"text": text, "cursor": cursor, "max_chunks": 3}))
         analysis["keyPoints"].extend(page["analysis"].get("keyPoints", []))
         cursor = page.get("nextCursor")
-    for mode in ("short", "detailed", "bullets", "simple", "exam_notes"):
+    summary_fields = {
+        "short": "summary",
+        "detailed": "overview",
+        "bullets": "groups",
+        "simple": "intro",
+        "exam_notes": "facts",
+    }
+    for mode, field in summary_fields.items():
         output = checked(f"generate_summary[{mode}]", lambda mode=mode: call(host, "generate_summary", {"analysis": analysis, "mode": mode})["output"])
+        value = output.get(field)
+        assert value
         assert output.get("summary") and len(output["summary"]) < len(text)
     checked("generate_action_items", lambda: call(host, "generate_action_items", {"analysis": analysis}))
     cards = checked("generate_flashcards", lambda: call(host, "generate_flashcards", {"analysis": analysis, "count": 1}))["output"]

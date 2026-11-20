@@ -1,103 +1,141 @@
 # StudyLens AI
 
-StudyLens AI is an AI Study & Document Analyst for turning pasted notes,
-articles, meeting transcripts, and reports into structured, verifiable study
-outputs. It uses a multi-step workflow: analyze the source, generate an
-output, critique the draft against the source, and answer grounded follow-up
-questions. AI results are labelled; when sampling is unavailable, the app
-returns a clear structured error instead of pretending.
+**Understand documents, verify drafts, and study smarter.**
 
-## About
+StudyLens AI is an AI-native study and document analyst designed for students, researchers, and professionals. It turns lecture notes, research articles, meeting transcripts, and business reports into structured, verifiable learning kits.
 
-StudyLens AI uses a multi-step AI workflow rather than a single chat reply.
-It analyzes a source document into evidence, generates a structured study kit,
-checks the draft in a separate verification pass, and supports grounded
-follow-up questions. Students and professionals can use it for lecture notes,
-articles, reports, and meeting transcripts. Each summary point, flashcard,
-quiz question, and answer can show its source passage. Quiz coverage and
-grading help identify sections that need review. If a question is not answered
-by the document, the app says so instead of guessing. AI-generated content is
-labelled, and Basic mode provides a deterministic fallback when sampling is
-unavailable. Paste or upload a document, review the extracted text, click
-Analyze, then explore Summary, Concepts, Actions, Study, Quiz, Ask, and
-Verification. Saved kits appear in History and can be searched, renamed,
-reopened, deleted, or exported as Markdown or plain text.
+---
 
-The ingestion layer accepts multiple local files by picker, drag and drop, or
-clipboard paste. Text, source code, CSV/TSV, JSON, XML, and HTML are processed
-offline in the browser and retain file names in grounded citations. DOCX, PPTX,
-XLSX, ODT, and EPUB are extracted by the bundled ZIP reader. Text-layer PDFs
-are extracted by the bundled plugin dependency with page citations. Scanned
-PDFs, image/OCR, legacy binary Office files, arbitrary ZIP archives, and
-audio/video transcription remain explicitly unsupported rather than failing
-silently. Extracted text is sent to the model only after you click Analyze.
+## 1. What StudyLens AI Does & Who It Is For
 
-### File support and limits
+StudyLens AI replaces shallow chat-based summarization with a multi-step evidence-based pipeline:
+1. **Analyze Document**: Classifies document structure, normalizes text, chunks large inputs, and extracts key points with exact passage citations.
+2. **Generate Grounded Study Kit**: Creates 5 specialized summary modes, actionable study tasks, flashcards, and conceptual quizzes.
+3. **Verify & Critique Drafts**: Cross-checks claims against the source document, identifying missing points and flagging unsupported claims.
+4. **Grounded Follow-up Q&A**: Answers questions using only document evidence; responds honestly with *"Not found in your document"* when an answer is absent.
+5. **Local History & Export**: Organizes analyses in an atomic, offline JSON store (`~/.anna-study-analyses.json`) with search, rename, delete, and Markdown/text export.
 
-| Format | Status | Notes |
-|---|---|---|
-| TXT, MD, LOG, SRT, VTT, source code | Full | UTF-8/UTF-16 and Windows-1252 fallback |
-| CSV, TSV, JSON, XML, HTML | Full/partial | CSV tables are rendered and large tables are sampled |
-| Text-layer PDF | Full/partial | Bundled `pypdf` extraction with page citations; scanned pages are reported |
-| DOCX, PPTX, XLSX, ODT, EPUB | Full/partial | Bundled browser ZIP/XML extraction; images are skipped and large sheets are sampled |
-| XLS/XLSB, DOC, PPT, RTF | Unsupported | Legacy binary formats have no bundled zero-dependency parser |
-| PNG, JPG, WEBP, scanned PDF | Unsupported | Offline OCR is not bundled |
-| ZIP | Unsupported as a generic archive | Only document containers are opened; arbitrary archives are rejected |
-| MP3, WAV, M4A, MP4 | Unsupported | No free offline transcription path is installed |
+### Target Audience
+- **Students & Learners**: Preparing for exams with flashcards, quizzes, and concept mastery diagnostics.
+- **Researchers & Academics**: Reading dense papers, checking claims against evidence passages, and extracting key definitions.
+- **Professionals & Analysts**: Distilling meeting minutes, transcripts, and briefing documents into actionable study plans and verified takeaways.
 
-The current limits are 20 MB per file, 40 MB total per batch, and 120,000
-characters of extracted text. Files are read locally; only extracted text and
-source metadata are sent during analysis.
+---
 
-## Run locally
+## 2. Core Features & AI Disclosure
 
-Prerequisites: Node.js, `uv`, Python 3.10+, and the Anna CLI.
+| Feature | Execution Type | Description |
+| :--- | :--- | :--- |
+| **Document Classification & Chunking** | Rule-Based | NFKC normalization, paragraph segmentation, and sentence salience ranking. |
+| **Short Summary** | AI / Fallback | 3–4 sentence executive summary with key takeaway and main topic. |
+| **Detailed Summary** | AI / Fallback | Multi-section breakdown with headings, paragraphs, and significance. |
+| **Bullet Summary** | AI / Fallback | Topic-grouped bullet points with source passage links. |
+| **Simple Summary** | AI / Fallback | Everyday analogies and simplified explanations. |
+| **Exam Notes Summary** | AI / Fallback | Key facts, processes, comparisons, mistakes, and likely exam questions. |
+| **Action Items & Study Plan** | AI / Fallback | Priority-ranked study tasks and time-estimated study schedule. |
+| **Flashcard Deck** | AI / Fallback | Conceptual Q&A cards with difficulty tags and source references. |
+| **Quiz Generation & Grading** | AI / Fallback | 4-option multiple-choice questions with weak-concept retry quizzes. |
+| **Verification & Fact Checking** | AI / Fallback | Compares drafts against source text to flag unsupported claims. |
+| **Document Q&A** | AI / Fallback | Grounded chat strictly citing source passages; never hallucinates. |
+| **Multi-File Ingestion** | Local Rule-Based | In-browser parsing of TXT, MD, CSV, JSON, XML, HTML, DOCX, PPTX, XLSX, ODT, EPUB, and text-layer PDF. |
+| **History & Storage** | Local Rule-Based | Atomic local JSON store with schema versioning, backup-on-migration, and corruption recovery. |
 
-```powershell
-cd C:\Users\kathi\my-first-anna-app
-$env:PYTHONUTF8 = "1"
-$env:PYTHONIOENCODING = "utf-8"
-anna-app validate
+> [!NOTE]
+> **AI vs. Basic Mode Transparency**:
+> StudyLens AI uses Anna's reverse-sampling model capabilities. When AI sampling is unavailable or denied by policy, the app automatically and transparently switches to **Basic mode**, providing deterministic, extractive highlights without simulating AI generation or failing silently.
+
+---
+
+## 3. Supported Formats & Limits
+
+| Format | Support Level | Details |
+| :--- | :--- | :--- |
+| **TXT, MD, LOG, SRT, VTT, source code** | Full | UTF-8, UTF-16, and Windows-1252 auto-detection. |
+| **CSV, TSV, JSON, XML, HTML** | Full / Partial | Formatted tables; very large tables sampled safely. |
+| **Text-layer PDF** | Full | Extracted by bundled `pypdf` with individual page citations. |
+| **DOCX, PPTX, XLSX, ODT, EPUB** | Full / Partial | Zero-dependency ZIP/XML reader; extracts text and slide/sheet metadata. |
+| **Scanned PDF, Images (PNG, JPG)** | Unsupported | Offline OCR is not bundled. |
+| **Binary Office (DOC, PPT, XLS)** | Unsupported | Legacy binary formats without XML layers are reported as unsupported. |
+| **Audio / Video Media** | Unsupported | Offline audio transcription is not bundled. |
+
+- **Max File Size**: 20 MB per file.
+- **Max Batch Size**: 40 MB combined.
+- **Max Text Extraction**: 120,000 characters per analysis.
+
+---
+
+## 4. Data Privacy & Storage
+
+- **Zero Third-Party APIs**: No external commercial LLM keys or proprietary network endpoints are required. All intelligence is provided via Anna's runtime.
+- **Local Storage**: Analyses are saved to `~/.anna-study-analyses.json` using atomic file replacement (`temp file -> rename`).
+- **Resilient Recovery**: If the history store is corrupted, the original file is preserved as `.recovery-*.bak` and an empty store is initialized cleanly.
+- **Cloud Agent Portability**: If home directory access is restricted, the history engine falls back safely to the system temporary directory without crashing.
+
+---
+
+## 5. Development & Local Testing
+
+### Prerequisites
+- Node.js 18+
+- Python 3.10+
+- Anna CLI (`npm install -g @anna-ai/cli`)
+
+### Setup
+```bash
+# Clone the repository
+git clone <repo-url>
+cd my-first-anna-app
+
+# Setup Python virtual environment
+cd executas/my-first-anna-app
+python -m venv .venv
+
+# On Linux / macOS:
+source .venv/bin/activate
+pip install -e ".[test]"
+
+# On Windows:
+.\.venv\Scripts\activate
+pip install -e ".[test]"
+cd ../..
+```
+
+### Running Tests & Validations
+```bash
+# 1. Run unit test suite (26 tests)
+npm test
+
+# 2. Run app schema validation
+npm run validate
+
+# 3. Run strict manifest and Host API ACL validation
 anna-app validate --strict
+
+# 4. Run end-to-end integration and stdio self-test
+npm run selftest
+```
+
+### Running Locally with Anna CLI
+```bash
 anna-app dev --no-watch --executa "dir=executas/my-first-anna-app,tool_id=tool-dev-my-first-anna-app,type=python,command=\"python my_first_anna_app_plugin.py\""
 ```
 
-Open the URL printed by the CLI. Use the sample document or paste at least
-20 characters, click **Analyze document**, review the verification panel,
-then try action items, flashcards, quiz, follow-up Q&A, copy/export, and
-history.
+---
 
-## Test the Executa
+## 6. Binary Distribution & Release
 
-```powershell
-cd C:\Users\kathi\my-first-anna-app\executas\my-first-anna-app
-uv sync --extra test
-.\.venv\Scripts\python.exe -m pytest -q
-```
+For store submission and Anna Cloud Agent execution (Linux-x86_64), executas are compiled into standalone binaries using PyInstaller via GitHub Actions:
+- **darwin-arm64**: macOS Apple Silicon (`.tar.gz`)
+- **darwin-x86_64**: macOS Intel (`.tar.gz`)
+- **linux-x86_64**: Linux x86_64 Cloud Agent target (`.tar.gz`)
+- **windows-x86_64**: Windows 64-bit (`.zip`)
 
-The tests cover health/describe, all workflow tools, malformed model output,
-sampling failure, input validation, chunking, and local persistence.
+Archives are named: `my-first-anna-app-summarizer-{version}-{platform}.[tar.gz|zip]` and published along with SHA-256 checksums to GitHub Releases.
 
-The browser bundle uses the documented Anna runtime storage methods
-`anna.storage.get` and `anna.storage.set` for resumable client state. The
-Executa also keeps a UTF-8 JSON fallback for local development and standalone
-plugin runs. The installed Anna CLI documents APS storage declarations and
-states that the local dev harness mocks APS by default.
+---
 
-## Fresh-install review checklist
+## 7. Troubleshooting
 
-1. Clone the repository and install `uv`, Python, Node.js, and the Anna CLI.
-2. Run `uv sync --extra test` in `executas\my-first-anna-app`.
-3. Log in with `anna-app login --host https://anna.partners`.
-4. Run `anna-app validate --strict`.
-5. Start the explicit Python Executa command shown in **Run locally** (the
-   default Windows Executa launcher may be blocked by local application
-   control policy).
-6. Paste a document and run analysis.
-7. Test short and detailed summaries, action items, flashcards, and quiz.
-8. Run critique/refine and ask a question that is and is not in the source.
-9. Save, refresh, reload history, copy, and export Markdown.
-10. Test a sampling-denied fixture and verify the honest error state.
-11. Capture the listing screenshots listed in `listing\SCREENSHOTS.md`.
-12. Upload the logo and screenshots through the current Anna listing workflow,
-    then push the draft, cut a version, and submit it for review.
+- **"describe handshake failed"**: Ensure stdout carries strictly JSON-RPC protocol messages. All logs, prints, and debug traces are directed exclusively to `sys.stderr`.
+- **"ModuleNotFoundError: my_first_anna_app_plugin"**: Run `npm test` from the root directory; the repository uses `pytest.ini` with `pythonpath = executas/my-first-anna-app`.
+- **"Basic mode displayed instead of AI"**: This indicates the local environment or dev harness does not have reverse sampling enabled or granted. Basic mode is the expected deterministic fallback.

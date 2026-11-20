@@ -17,3 +17,6 @@ test = ["pytest>=8"]
 
 [tool.setuptools]
 py-modules = ["my_first_anna_app_plugin"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]

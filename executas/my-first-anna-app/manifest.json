@@ -2,16 +2,192 @@
   "display_name": "tool-dev-my-first-anna-app",
   "version": "0.3.0",
   "description": "AI Study & Document Analyst with structured analysis, verified outputs, grounded Q&A, and history.",
+  "credentials": [],
   "host_capabilities": ["llm.sample"],
+  "runtime": {
+    "type": "binary"
+  },
   "tools": [
-    {"name": "analyze_document", "description": "Classify and structurally analyze a document.", "parameters": {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]}},
-    {"name": "generate_outputs", "description": "Generate a summary, action list, flashcards, or quiz from analysis.", "parameters": {"type": "object", "properties": {"analysis": {"type": "object"}, "mode": {"type": "string"}}, "required": ["analysis", "mode"]}},
-    {"name": "critique_and_refine", "description": "Check a draft against source text and revise unsupported or missing content.", "parameters": {"type": "object", "properties": {"source_text": {"type": "string"}, "draft": {}}, "required": ["source_text", "draft"]}},
-    {"name": "ask_followup", "description": "Answer a question using only the supplied document analysis.", "parameters": {"type": "object", "properties": {"source_text": {"type": "string"}, "analysis": {"type": "object"}, "question": {"type": "string"}, "history": {"type": "array"}}, "required": ["source_text", "analysis", "question"]}},
-    {"name": "save_analysis", "description": "Save an analysis for later review.", "parameters": {"type": "object", "properties": {"analysis": {"type": "object"}, "title": {"type": "string"}}, "required": ["analysis"]}},
-    {"name": "list_analyses", "description": "List saved analyses.", "parameters": {"type": "object", "properties": {}, "additionalProperties": false}},
-    {"name": "get_analysis", "description": "Get a saved analysis by ID.", "parameters": {"type": "object", "properties": {"id": {"type": "string"}}, "required": ["id"]}},
-    {"name": "delete_analysis", "description": "Delete a saved analysis by ID.", "parameters": {"type": "object", "properties": {"id": {"type": "string"}}, "required": ["id"]}},
-    {"name": "parse_pdf", "description": "Extract text and page citations from a PDF supplied as base64 data.", "parameters": {"type": "object", "properties": {"data": {"type": "string"}, "name": {"type": "string"}}, "required": ["data"]}}
+    {
+      "name": "analyze_document",
+      "description": "Classify and structurally analyze a document.",
+      "parameters": [
+        {"name": "text", "type": "string", "description": "Raw document text to analyze.", "required": true},
+        {"name": "cursor", "type": "integer", "description": "Cursor for paginated chunk analysis.", "required": false},
+        {"name": "max_chunks", "type": "integer", "description": "Maximum number of chunks to process.", "required": false},
+        {"name": "source_map", "type": "array", "description": "File boundaries and line ranges for citations.", "required": false, "items_type": "object"}
+      ],
+      "timeout": 55
+    },
+    {
+      "name": "health",
+      "description": "Report plugin readiness and model availability.",
+      "parameters": [],
+      "timeout": 10
+    },
+    {
+      "name": "generate_summary",
+      "description": "Generate a grounded summary in a selected study mode.",
+      "parameters": [
+        {"name": "analysis", "type": "object", "description": "Document analysis object.", "required": true},
+        {"name": "mode", "type": "string", "description": "Summary mode: short, detailed, bullets, simple, or exam_notes.", "required": true, "enum": ["short", "detailed", "bullets", "simple", "exam_notes"]},
+        {"name": "length", "type": "string", "description": "Target length descriptor.", "required": false},
+        {"name": "language", "type": "string", "description": "Target language for summary.", "required": false}
+      ],
+      "timeout": 55
+    },
+    {
+      "name": "generate_action_items",
+      "description": "Generate grounded study tasks and a study plan.",
+      "parameters": [
+        {"name": "analysis", "type": "object", "description": "Document analysis object.", "required": true}
+      ],
+      "timeout": 55
+    },
+    {
+      "name": "generate_flashcards",
+      "description": "Generate grounded flashcards.",
+      "parameters": [
+        {"name": "analysis", "type": "object", "description": "Document analysis object.", "required": true},
+        {"name": "count", "type": "integer", "description": "Number of flashcards to generate.", "required": false},
+        {"name": "difficulty", "type": "string", "description": "Difficulty level.", "required": false}
+      ],
+      "timeout": 55
+    },
+    {
+      "name": "generate_quiz",
+      "description": "Generate a grounded quiz with concept coverage.",
+      "parameters": [
+        {"name": "analysis", "type": "object", "description": "Document analysis object.", "required": true},
+        {"name": "count", "type": "integer", "description": "Number of questions.", "required": false},
+        {"name": "difficulty", "type": "string", "description": "Difficulty level.", "required": false},
+        {"name": "weak_concepts", "type": "array", "description": "Concepts to prioritize.", "required": false, "items_type": "string"}
+      ],
+      "timeout": 55
+    },
+    {
+      "name": "grade_quiz",
+      "description": "Grade quiz answers and identify weak concepts.",
+      "parameters": [
+        {"name": "quiz", "type": "object", "description": "The generated quiz object.", "required": true},
+        {"name": "answers", "type": "object", "description": "Mapping of question ID to chosen answer.", "required": true}
+      ],
+      "timeout": 30
+    },
+    {
+      "name": "verify_and_refine",
+      "description": "Verify a draft against source text and return a revised draft.",
+      "parameters": [
+        {"name": "source_text", "type": "string", "description": "Source text to verify against.", "required": true},
+        {"name": "draft", "type": "object", "description": "Draft content to verify.", "required": true}
+      ],
+      "timeout": 55
+    },
+    {
+      "name": "ask_question",
+      "description": "Answer a grounded question about a document.",
+      "parameters": [
+        {"name": "source_text", "type": "string", "description": "Source text.", "required": true},
+        {"name": "analysis", "type": "object", "description": "Analysis object.", "required": true},
+        {"name": "question", "type": "string", "description": "Question to answer.", "required": true},
+        {"name": "history", "type": "array", "description": "Prior chat messages.", "required": false, "items_type": "object"}
+      ],
+      "timeout": 55
+    },
+    {
+      "name": "save_analysis",
+      "description": "Save an analysis for later review.",
+      "parameters": [
+        {"name": "analysis", "type": "object", "description": "Analysis data to persist.", "required": true},
+        {"name": "title", "type": "string", "description": "Title for saved record.", "required": false}
+      ],
+      "timeout": 30
+    },
+    {
+      "name": "list_analyses",
+      "description": "List saved analyses.",
+      "parameters": [],
+      "timeout": 30
+    },
+    {
+      "name": "get_analysis",
+      "description": "Get a saved analysis by ID.",
+      "parameters": [
+        {"name": "id", "type": "string", "description": "Saved analysis ID.", "required": true}
+      ],
+      "timeout": 30
+    },
+    {
+      "name": "delete_analysis",
+      "description": "Delete a saved analysis by ID.",
+      "parameters": [
+        {"name": "id", "type": "string", "description": "Saved analysis ID.", "required": true}
+      ],
+      "timeout": 30
+    },
+    {
+      "name": "rename_analysis",
+      "description": "Rename a saved analysis.",
+      "parameters": [
+        {"name": "id", "type": "string", "description": "Saved analysis ID.", "required": true},
+        {"name": "title", "type": "string", "description": "New title for saved record.", "required": true}
+      ],
+      "timeout": 30
+    },
+    {
+      "name": "search_analyses",
+      "description": "Search saved analyses by title.",
+      "parameters": [
+        {"name": "query", "type": "string", "description": "Query string to search in titles.", "required": true}
+      ],
+      "timeout": 30
+    },
+    {
+      "name": "export_analysis",
+      "description": "Export a supplied analysis as Markdown or plain text.",
+      "parameters": [
+        {"name": "analysis", "type": "object", "description": "Analysis to export.", "required": true},
+        {"name": "format", "type": "string", "description": "markdown or text.", "required": true, "enum": ["markdown", "text"]}
+      ],
+      "timeout": 30
+    },
+    {
+      "name": "parse_pdf",
+      "description": "Extract text and page citations from a PDF supplied as base64 data.",
+      "parameters": [
+        {"name": "data", "type": "string", "description": "Base64 encoded PDF data.", "required": true},
+        {"name": "name", "type": "string", "description": "Optional original file name.", "required": false}
+      ],
+      "timeout": 55
+    },
+    {
+      "name": "generate_outputs",
+      "description": "Compatibility wrapper for summary, actions, flashcards, or quiz.",
+      "parameters": [
+        {"name": "analysis", "type": "object", "description": "Document analysis object.", "required": true},
+        {"name": "mode", "type": "string", "description": "Output mode.", "required": true}
+      ],
+      "timeout": 55
+    },
+    {
+      "name": "critique_and_refine",
+      "description": "Check a draft against source text and revise unsupported or missing content.",
+      "parameters": [
+        {"name": "source_text", "type": "string", "description": "Source text.", "required": true},
+        {"name": "draft", "type": "object", "description": "Draft content.", "required": true}
+      ],
+      "timeout": 55
+    },
+    {
+      "name": "ask_followup",
+      "description": "Answer a question using only the supplied document analysis.",
+      "parameters": [
+        {"name": "source_text", "type": "string", "description": "Source text.", "required": true},
+        {"name": "analysis", "type": "object", "description": "Analysis object.", "required": true},
+        {"name": "question", "type": "string", "description": "Question.", "required": true},
+        {"name": "history", "type": "array", "description": "History.", "required": false, "items_type": "object"}
+      ],
+      "timeout": 55
+    }
   ]
 }

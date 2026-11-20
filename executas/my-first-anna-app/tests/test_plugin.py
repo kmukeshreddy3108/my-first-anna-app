@@ -5,8 +5,23 @@ import my_first_anna_app_plugin as plugin
 
 def test_health_manifest_and_tools():
     assert plugin.MANIFEST["version"] == "0.3.0"
+    assert plugin.MANIFEST["description"]
+    assert plugin.MANIFEST["credentials"] == []
+    assert plugin.MANIFEST["host_capabilities"] == ["llm.sample"]
+    assert plugin.MANIFEST["runtime"] == {"type": "binary"}
     names = {tool["name"] for tool in plugin.MANIFEST["tools"]}
     assert {"analyze_document", "generate_outputs", "critique_and_refine", "ask_followup", "save_analysis", "list_analyses", "get_analysis", "delete_analysis"} <= names
+    allowed_types = {"string", "integer", "number", "boolean", "array", "object"}
+    for tool in plugin.MANIFEST["tools"]:
+        assert isinstance(tool["name"], str)
+        assert isinstance(tool["description"], str)
+        assert isinstance(tool["parameters"], list)
+        assert isinstance(tool.get("timeout"), int)
+        for param in tool["parameters"]:
+            assert isinstance(param["name"], str)
+            assert param["type"] in allowed_types
+            assert isinstance(param["description"], str)
+            assert isinstance(param["required"], bool)
 
 
 def test_analysis_fallback_and_validation(monkeypatch):
@@ -122,6 +137,47 @@ def test_local_persistence(monkeypatch, tmp_path):
     assert plugin._persist("delete_analysis", {"id": record_id})["success"]
 
 
+def test_legacy_storage_is_backed_up_and_migrated(monkeypatch, tmp_path):
+    store = tmp_path / "analyses.json"
+    store.write_text(json.dumps([{"id": "legacy", "title": "Legacy", "analysis": {}, "createdAt": "now"}]), encoding="utf-8")
+    monkeypatch.setattr(plugin, "STORE_PATH", store)
+
+    result = plugin._persist("list_analyses", {})
+
+    assert result["success"] is True
+    assert result["data"]["analyses"][0]["id"] == "legacy"
+    migrated = json.loads(store.read_text(encoding="utf-8"))
+    assert migrated["schemaVersion"] == plugin.STORAGE_SCHEMA_VERSION
+    assert migrated["analyses"][0]["id"] == "legacy"
+    assert list(tmp_path.glob("analyses.json.pre-migration-*.bak"))
+
+
+def test_corrupt_storage_is_preserved_and_surfaces_error(monkeypatch, tmp_path):
+    store = tmp_path / "analyses.json"
+    original = "{not valid json"
+    store.write_text(original, encoding="utf-8")
+    monkeypatch.setattr(plugin, "STORE_PATH", store)
+
+    result = plugin._persist("list_analyses", {})
+
+    assert result["success"] is False
+    assert result["data"]["storageError"] is True
+    assert "could not be read" in result["error"]
+    assert store.read_text(encoding="utf-8") == original
+    recovery = list(tmp_path.glob("analyses.json.recovery-*.bak"))
+    assert len(recovery) == 1
+    assert recovery[0].read_text(encoding="utf-8") == original
+
+
+def test_empty_storage_file_handled_gracefully(monkeypatch, tmp_path):
+    store = tmp_path / "analyses.json"
+    store.write_text("", encoding="utf-8")
+    monkeypatch.setattr(plugin, "STORE_PATH", store)
+    result = plugin._persist("list_analyses", {})
+    assert result["success"] is True
+    assert result["data"]["analyses"] == []
+
+
 def test_grounded_outputs_quiz_grading_export_and_cache(monkeypatch):
     monkeypatch.setattr(plugin, "_sampling_enabled", False)
     text = "Solar panels convert light into electricity. Batteries store energy for later use."
@@ -204,3 +260,19 @@ def test_history_rename_and_search(monkeypatch, tmp_path):
     assert plugin._persist("rename_analysis", {"id": record_id, "title": "Biology notes"})["success"]
     matches = plugin._persist("search_analyses", {"query": "biology"})
     assert matches["data"]["analyses"][0]["title"] == "Biology notes"
+
+
+def test_all_summary_modes_provide_concise_summary_shorter_than_source(monkeypatch):
+    monkeypatch.setattr(plugin, "_sampling_enabled", False)
+    short_doc = "Solar panels convert light into electricity. Batteries store energy for later use."
+    analysis = plugin._fallback_analysis(short_doc)
+    assert analysis["sourceLength"] == len(short_doc)
+    modes = ("short", "detailed", "bullets", "simple", "exam_notes")
+    for mode in modes:
+        res = plugin._generate_summary({"analysis": analysis, "mode": mode})
+        assert res["success"] is True
+        output = res["data"]["output"]
+        assert "summary" in output
+        assert isinstance(output["summary"], str)
+        assert len(output["summary"]) > 0
+        assert len(output["summary"]) < len(short_doc)

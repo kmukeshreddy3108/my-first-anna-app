@@ -1,8 +1,8 @@
 {
   "slug": "my-first-anna-app",
-  "name": "my-first-anna-app",
+  "name": "StudyLens AI",
   "bundled_executas": {
-    "summarizer": {
+    "studylens": {
       "path": "./executas/my-first-anna-app"
     }
   },

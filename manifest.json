@@ -2,7 +2,8 @@
   "schema": 2,
   "required_executas": [
     {
-      "tool_id": "bundled:summarizer"
+      "tool_id": "bundled:studylens",
+      "version": "latest"
     }
   ],
   "host_capabilities": ["llm.sample", "llm.complete"],
@@ -30,7 +31,7 @@
       }
     ],
     "host_api": {
-      "tools": ["required:bundled:summarizer"],
+      "tools": ["required:bundled:studylens"],
       "storage": ["get", "set"],
       "window": ["set_title", "ready"],
       "llm": ["complete", "sample"]

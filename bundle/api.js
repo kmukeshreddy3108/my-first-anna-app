@@ -108,9 +108,13 @@ export function createApi({ toolId, onStatus, onError }) {
   async function health() {
     try {
       const result = await invoke("health", {}, { retrySession: false });
-      return { connected: true, modelAvailable: result?.modelAvailable === true };
+      return {
+        connected: true,
+        status: result?.status || "unknown",
+        modelAvailable: result?.modelAvailable === true,
+      };
     } catch (error) {
-      return { connected: false, modelAvailable: false, error };
+      return { connected: false, status: "service-unavailable", modelAvailable: false, error };
     }
   }
 
@@ -126,6 +130,10 @@ export function createApi({ toolId, onStatus, onError }) {
     storageSet: async (value) => {
       if (!anna) await connect();
       return anna.storage.set(value);
+    },
+    storageGet: async (value) => {
+      if (!anna) await connect();
+      return anna.storage.get(value);
     },
     isConnected: () => connected,
   };

@@ -22,6 +22,11 @@
             "entrypoint": "my-first-anna-app-summarizer",
             "format": "tar.gz"
           },
+          "darwin-x86_64": {
+            "path": "dist/my-first-anna-app-summarizer-{version}-darwin-x86_64.tar.gz",
+            "entrypoint": "my-first-anna-app-summarizer",
+            "format": "tar.gz"
+          },
           "linux-x86_64": {
             "path": "dist/my-first-anna-app-summarizer-{version}-linux-x86_64.tar.gz",
             "entrypoint": "my-first-anna-app-summarizer",

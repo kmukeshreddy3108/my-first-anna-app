@@ -282,7 +282,8 @@ async function ingestOne(file, options) {
 
 export async function ingest(files, options = {}) {
   const list = Array.from(files || []);
-  const total = list.reduce((sum, file) => sum + file.size, 0);
+  const existingBytes = Number.isFinite(options.existingBytes) ? Math.max(0, options.existingBytes) : 0;
+  const total = existingBytes + list.reduce((sum, file) => sum + file.size, 0);
   if (total > MAX_TOTAL_BYTES) {
     return list.map(file => ({ name: file.name, size: file.size, type: file.type, detectedKind: extension(file.name) || "unknown", status: "unsupported", text: "", warnings: [`Combined files exceed the ${MAX_TOTAL_BYTES / 1024 / 1024} MB total limit.`], pages: [], sourceMap: [] }));
   }
