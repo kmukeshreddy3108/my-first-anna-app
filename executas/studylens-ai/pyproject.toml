@@ -3,9 +3,9 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "tool-dev-my-first-anna-app"
+name = "studylens-ai"
 version = "0.3.0"
-description = "AI Study & Document Analyst Executa for the my-first-anna-app Anna App"
+description = "AI Study & Document Analyst Executa for StudyLens AI"
 requires-python = ">=3.10"
 dependencies = ["pypdf>=6.0,<7"]
 
@@ -13,10 +13,10 @@ dependencies = ["pypdf>=6.0,<7"]
 test = ["pytest>=8"]
 
 [project.scripts]
-"tool-dev-my-first-anna-app" = "my_first_anna_app_plugin:main"
+"studylens-ai" = "studylens_ai_plugin:main"
 
 [tool.setuptools]
-py-modules = ["my_first_anna_app_plugin"]
+py-modules = ["studylens_ai_plugin"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

@@ -43,7 +43,7 @@ MAX_STORAGE_BYTES = 50 * 1024 * 1024
 MANIFEST: dict[str, Any] = {
     "version": "0.3.0",
     "description": "AI Study & Document Analyst with structured analysis, verified outputs, grounded Q&A, and history.",
-    "display_name": "tool-dev-my-first-anna-app",
+    "display_name": "StudyLens AI Summarizer & Document Analyst",
     "credentials": [],
     "host_capabilities": ["llm.sample"],
     "runtime": {"type": "binary"},

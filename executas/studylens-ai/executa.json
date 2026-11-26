@@ -1,0 +1,44 @@
+{
+  "slug": "studylens-ai",
+  "name": "studylens-ai",
+  "version": "0.3.0",
+  "executa_type": "tool",
+  "description": "AI Study & Document Analyst Python Executa for StudyLens AI.",
+  "tool_id": "tool-dev-studylens-ai",
+  "type": "python",
+  "manifest_file": "manifest.json",
+  "distribution": {
+    "active": "binary",
+    "profiles": {
+      "local": {
+        "type": "local",
+        "executable_name": "studylens-ai"
+      },
+      "binary": {
+        "type": "binary",
+        "binary_artifacts": {
+          "darwin-arm64": {
+            "path": "dist/studylens-ai-{version}-darwin-arm64.tar.gz",
+            "entrypoint": "studylens-ai",
+            "format": "tar.gz"
+          },
+          "darwin-x86_64": {
+            "path": "dist/studylens-ai-{version}-darwin-x86_64.tar.gz",
+            "entrypoint": "studylens-ai",
+            "format": "tar.gz"
+          },
+          "linux-x86_64": {
+            "path": "dist/studylens-ai-{version}-linux-x86_64.tar.gz",
+            "entrypoint": "studylens-ai",
+            "format": "tar.gz"
+          },
+          "windows-x86_64": {
+            "path": "dist/studylens-ai-{version}-windows-x86_64.zip",
+            "entrypoint": "studylens-ai.exe",
+            "format": "zip"
+          }
+        }
+      }
+    }
+  }
+}

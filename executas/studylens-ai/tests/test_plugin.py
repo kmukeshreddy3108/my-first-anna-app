@@ -1,6 +1,6 @@
 import json
 
-import my_first_anna_app_plugin as plugin
+import studylens_ai_plugin as plugin
 
 
 def test_health_manifest_and_tools():

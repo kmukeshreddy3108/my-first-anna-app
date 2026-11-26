@@ -87,7 +87,7 @@ git clone <repo-url>
 cd my-first-anna-app
 
 # Setup Python virtual environment
-cd executas/my-first-anna-app
+cd executas/studylens-ai
 python -m venv .venv
 
 # On Linux / macOS:
@@ -117,7 +117,9 @@ npm run selftest
 
 ### Running Locally with Anna CLI
 ```bash
-anna-app dev --no-watch --executa "dir=executas/my-first-anna-app,tool_id=tool-dev-my-first-anna-app,type=python,command=\"python my_first_anna_app_plugin.py\""
+npm run dev
+# or:
+anna-app dev --port 5180
 ```
 
 ---
@@ -130,12 +132,12 @@ For store submission and Anna Cloud Agent execution (Linux-x86_64), executas are
 - **linux-x86_64**: Linux x86_64 Cloud Agent target (`.tar.gz`)
 - **windows-x86_64**: Windows 64-bit (`.zip`)
 
-Archives are named: `my-first-anna-app-summarizer-{version}-{platform}.[tar.gz|zip]` and published along with SHA-256 checksums to GitHub Releases.
+Archives are named: `studylens-ai-{version}-{platform}.[tar.gz|zip]` and published along with SHA-256 checksums to GitHub Releases.
 
 ---
 
 ## 7. Troubleshooting
 
 - **"describe handshake failed"**: Ensure stdout carries strictly JSON-RPC protocol messages. All logs, prints, and debug traces are directed exclusively to `sys.stderr`.
-- **"ModuleNotFoundError: my_first_anna_app_plugin"**: Run `npm test` from the root directory; the repository uses `pytest.ini` with `pythonpath = executas/my-first-anna-app`.
+- **"ModuleNotFoundError: studylens_ai_plugin"**: Run `npm test` from the root directory; the repository uses `pytest.ini` with `pythonpath = executas/studylens-ai`.
 - **"Basic mode displayed instead of AI"**: This indicates the local environment or dev harness does not have reverse sampling enabled or granted. Basic mode is the expected deterministic fallback.

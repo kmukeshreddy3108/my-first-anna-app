@@ -2,7 +2,7 @@ import { createApi } from "./api.js";
 import { ingest, INGEST_LIMITS } from "./ingest.js";
 import { sampleFiles, sampleTexts } from "./samples.js";
 
-const DEV_FALLBACK_TOOL_ID = "tool-dev-my-first-anna-app";
+const DEV_FALLBACK_TOOL_ID = "tool-dev-studylens-ai";
 const TOOL_ID = window.__ANNA_TOOL_IDS__?.["studylens"] || DEV_FALLBACK_TOOL_ID;
 let cancelled = false;
 let heartbeatTimer = null;

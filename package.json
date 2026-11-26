@@ -2,8 +2,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node scripts/run-py.mjs -m pytest -q executas/my-first-anna-app/tests",
+    "test": "node scripts/run-py.mjs -m pytest -q executas/studylens-ai/tests",
     "selftest": "node scripts/run-py.mjs scripts/selftest.py && node scripts/ingest_selftest.mjs",
-    "validate": "anna-app validate --manifest manifest.json --bundle bundle"
+    "validate": "anna-app validate --manifest manifest.json --bundle bundle",
+    "dev": "anna-app dev --port 5180"
   }
 }

@@ -11,8 +11,8 @@ import time
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
-PLUGIN_DIR = ROOT / "executas" / "my-first-anna-app"
-PLUGIN = PLUGIN_DIR / "my_first_anna_app_plugin.py"
+PLUGIN_DIR = ROOT / "executas" / "studylens-ai"
+PLUGIN = PLUGIN_DIR / "studylens_ai_plugin.py"
 SAMPLES = sorted(ROOT.joinpath("samples").glob("*.md"))
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")

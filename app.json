@@ -1,9 +1,9 @@
 {
-  "slug": "my-first-anna-app",
+  "slug": "studylens-ai",
   "name": "StudyLens AI",
   "bundled_executas": {
     "studylens": {
-      "path": "./executas/my-first-anna-app"
+      "path": "./executas/studylens-ai"
     }
   },
   "tagline": "Understand documents, verify drafts, and study smarter",

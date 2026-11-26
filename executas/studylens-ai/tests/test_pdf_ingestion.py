@@ -1,7 +1,7 @@
 import base64
 from pathlib import Path
 
-import my_first_anna_app_plugin as plugin
+import studylens_ai_plugin as plugin
 
 
 def test_pdf_fixture_extracts_page_text():
