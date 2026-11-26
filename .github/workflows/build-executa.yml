@@ -23,10 +23,10 @@ jobs:
             os: windows-latest
             archive_format: zip
           - platform: darwin-arm64
-            os: macos-14
+            os: macos-15
             archive_format: tar.gz
           - platform: darwin-x86_64
-            os: macos-13
+            os: macos-15-intel
             archive_format: tar.gz
 
     steps:
@@ -42,9 +42,12 @@ jobs:
         shell: bash
         working-directory: executas/my-first-anna-app
         run: |
-          python -m pip install --upgrade pip
+          python -m pip install --upgrade pip setuptools wheel
           pip install pyinstaller .
           pyinstaller --onedir --clean --name my-first-anna-app-summarizer my_first_anna_app_plugin.py
+          if [[ "${{ runner.os }}" == "macOS" ]]; then
+            codesign --force --deep --sign - dist/my-first-anna-app-summarizer
+          fi
 
       - name: Package Artifact (Unix)
         if: matrix.archive_format == 'tar.gz'
