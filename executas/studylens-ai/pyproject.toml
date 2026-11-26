@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "studylens-ai"
-version = "0.3.0"
+version = "0.3.1"
 description = "AI Study & Document Analyst Executa for StudyLens AI"
 requires-python = ">=3.10"
 dependencies = ["pypdf>=6.0,<7"]

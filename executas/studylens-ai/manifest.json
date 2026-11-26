@@ -1,6 +1,6 @@
 {
   "display_name": "StudyLens AI Summarizer & Document Analyst",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "AI Study & Document Analyst with structured analysis, verified outputs, grounded Q&A, and history.",
   "credentials": [],
   "host_capabilities": ["llm.sample"],

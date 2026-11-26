@@ -41,7 +41,7 @@ STORAGE_SCHEMA_VERSION = 1
 MAX_STORAGE_BYTES = 50 * 1024 * 1024
 
 MANIFEST: dict[str, Any] = {
-    "version": "0.3.0",
+    "version": "0.3.1",
     "description": "AI Study & Document Analyst with structured analysis, verified outputs, grounded Q&A, and history.",
     "display_name": "StudyLens AI Summarizer & Document Analyst",
     "credentials": [],

@@ -1,7 +1,7 @@
 {
   "slug": "studylens-ai",
   "name": "studylens-ai",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "executa_type": "tool",
   "description": "AI Study & Document Analyst Python Executa for StudyLens AI.",
   "tool_id": "tool-dev-studylens-ai",

@@ -4,7 +4,7 @@ import studylens_ai_plugin as plugin
 
 
 def test_health_manifest_and_tools():
-    assert plugin.MANIFEST["version"] == "0.3.0"
+    assert plugin.MANIFEST["version"] == "0.3.1"
     assert plugin.MANIFEST["description"]
     assert plugin.MANIFEST["credentials"] == []
     assert plugin.MANIFEST["host_capabilities"] == ["llm.sample"]
